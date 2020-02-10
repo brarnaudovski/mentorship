@@ -1,6 +1,6 @@
 # Instructions
 
-With the help of course, you will do the incredibly simple things that all programmers need to do to learn a language:
+With the help of this course, you will do the incredibly simple things that all programmers need to do to learn a language:
 
 1. Go through each exercise.
 2. Type in each sample exactly.
