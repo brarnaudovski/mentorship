@@ -59,19 +59,18 @@ Sum the digits
 ## Using tests
 
 Validate that:
-- single digit strings can not be valid
-- a single zero is invalid
-- a simple valid sin that remains valid if reversed
-- a simple valid sin that becomes invalid if reversed
-- a valid canadian sin
-- invalid canadian sin
-- invalid credit card
-- valid number with an even number of digits
-- valid strings with a non digit included become invalid
-- valid strings with a non digit added at the end become invalid
-- valid strings with punctuation included become invalid
-- valid strings with symbols included become invalid
-- single zero with space is invalid
-- more than a single zero is valid
-- input digit 9 is correctly converted to output digit 9
-- strings with non digits is invalid
+- single digit strings can not be valid. Ex: '1'
+- a single zero is invalid. Ex: '0'
+- a simple valid sin that remains valid if reversed. Ex: '059'
+- a simple valid sin that becomes invalid if reversed. Ex: '59'
+- a valid canadian sin. Ex: '055 444 285'
+- invalid canadian sin. Ex: '055 444 286'
+- invalid credit card. Ex: '8273 1232 7352 0569'
+- valid strings with a non digit included become invalid. Ex: '055a 444 285'
+- valid strings with a non digit added at the end become invalid. Ex: '059a'
+- valid strings with punctuation included become invalid. Ex: '055-444-285'
+- valid strings with symbols included become invalid. Ex: '055£ 444$ 285'
+- single zero with space is invalid. Ex: ' 0'
+- more than a single zero is valid. Ex: '0000 0'
+- input digit 9 is correctly converted to output digit 9. Ex: '091'
+- strings with non digits is invalid. Ex: ':9'
