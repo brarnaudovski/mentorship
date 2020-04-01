@@ -23,7 +23,7 @@ To distinguish left from right there is a gap between the C and D bands:
 + (C) The decimal multiplier (number of trailing zeroes)
 - (D) If present, indicates tolerance of value in percent (no band means 20%)
 
-In the above example, a resistor with bands of red, violet, green, and brown has first digit 2 (red; see table below), second digit 7 (violet), followed by 5 (green) zeroes: 2700000 ohms. Gold signifies that the tolerance is ±5%.
+In the above example, a resistor with bands of red, violet, green, and gold has first digit 2 (red; see table below), second digit 7 (violet), followed by 5 (green) zeroes: 2700000 ohms. Gold signifies that the tolerance is ±5%.
 
 All coded components have at least two value bands and a multiplier; other bands are optional.
 
@@ -35,3 +35,7 @@ All coded components have at least two value bands and a multiplier; other bands
 
 In this task you are going to create a helpful program so that you don't have to remember the values of the bands. The program will take color names as input and output a two digit number, even if the input is more than two colors!
 For example: `['brown', 'green']` should return 15; `['brown', 'green', 'violet']` should return 15 too, ignoring the third color.
+
+
+**Task 2**
+We want to upgrade task1 and add new method called `specification`. This method should print the specification of the resistor in format: `xxxx ohms +/- yy%`, where `xxxx` is the total ohms for a resistor, and `yy` represent the tolerance for a resistor. For example, a resistor with bands of red, violet, green, and brown has first digit 2 (red; see table below), second digit 7 (violet), followed by 5 (green) zeroes: 2700000 ohms. Brown signifies that the tolerance is ±1%. For this type of resistor the specification is: `2700000 ohms +/-1%`
