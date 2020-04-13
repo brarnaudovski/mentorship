@@ -6,8 +6,8 @@ Example:
 ```ruby
 input_array = [1, 1, 2, -2, 5, 2, 4, 4, -1, -2, 5, 5]
 
-# First integer would be: -1
-# All the integers would be: [-1, 5]
+# First integer would be: 5
+# All the integers would be: [5, -1]
 ```
 
 ```ruby
