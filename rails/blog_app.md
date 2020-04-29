@@ -56,6 +56,7 @@ This will fire up Puma, a web server distributed with Rails by default. To see y
 
 ![Rails welcome logo][rails_welcome]
 
+[rails_welcome]: ./images/rails_welcome.png "Rails Welcome"
 ---
 
 **TIP**: To stop the web server, hit Ctrl+C in the terminal window where it's running. To verify the server has stopped you should see your command prompt cursor again. For most UNIX-like systems including macOS this will be a dollar sign `$`. In development mode, Rails does not generally require you to restart the server; changes you make in files will be automatically picked up by the server.
@@ -156,7 +157,165 @@ end
 
 This `root` method defines a root path for our application. The root method tells Rails to map requests to the root of the application to the `ArticlesController` `index` action.
 
-Launch the web server again if you stopped it to generate the controller *(rails server)8 and navigate to `http://localhost:3000` in your browser. You'll see the "Hello, Rails!" message you put into `app/views/articles/index.html.erb`, indicating that this new route is indeed going to `ArticleController`'s `index` action and is rendering the view correctly.
+Launch the web server again if you stopped it to generate the controller *(rails server)8 and navigate to `http://localhost:3000` in your browser. You'll see the "Hello, Rails!" message you put into `app/views/articles/index.html.erb`, indicating that this new route is indeed going to `ArticlesController`'s `index` action and is rendering the view correctly.
 
+## Creating a model
 
-[rails_welcome]: ./images/rails_welcome.png "Rails Welcome"
+So far, we have seen routes, controllers, actions and views within our Rails application. All of these are conventional parts of Rails applications and it is done this way to follow the MVC pattern. The MVC pattern is an application design pattern which makes it easy to separate the different responsibilities of applications into easy to reason about pieces.
+So with "MVC", you might guess that the "V" stands for "View" and the "C" stands for controller, but you might have trouble guessing what the "M" stands for. This next section is all about that "M" part, the *model*.
+
+A model is a class that is used to represent data in our application. In a plain-Ruby application, you might have a class defined like this:
+
+```ruby
+class Article
+  attr_reader :title, :body
+
+  def initialize(title:, body:)
+    @title = title
+    @body = body
+  end
+end
+```
+Models in a Rails application are designed for this purpose too: to represent particular data.
+
+Models have another purpose in a Rails application too though. They're also used to interact with the application's database. In this section, we're going to use a model to put data into our database and to pull that data back out.
+
+To start with, we're going to need to generate a model. We can do that with the following command:
+
+```
+❯ rails generate model article title:string body:text
+```
+
+**NOTE**: The model name here is *singular*, because model classes are classes that are used to represent single instances. To help remember this rule, in a Ruby application to start building a new object, you would define the class as `Article`, and then do `Article.new`, not Articles and Articles.new.
+
+When this command runs, it will generate the following files:
+
+```
+invoke active_record
+create  db/migrate/[timestamp]_create_articles.rb
+create  app/models/article.rb
+invoke test_unit
+create  test/models/article_test.rb
+create  test/fixtures/articles.yml
+```
+
+The two files we'll focus on here are the migration (the file at `db/migrate`) and the model.
+
+A migration is used to alter the structure of our database, and it is written in Ruby. Let's look at this file now, `db/migrate/[timestamp]_create_articles.rb`.
+
+```ruby
+class CreateArticles < ActiveRecord::Migration[6.0]
+  def change
+    create_table :articles do |t|
+      t.string :title
+      t.text :body
+
+      t.timestamps
+    end
+  end
+end
+```
+
+This file contains Ruby code to create a table within our application's database. Migrations are written in Ruby so that they can be database-agnostic -- regardless of what database you use with Rails, you'll always write migrations in Ruby.
+
+Inside this migration file, there's a `create_table` method that defines how the articles table should be constructed. This method will create a table in our database that contains an id auto-incrementing primary key. That means that the first record in our table will have an id of 1, and the next id of 2, and so on. Rails assumes by default this is the behavior we want, and so it does this for us.
+
+Inside the block for `create_table`, we have two fields, `title` and `body`. These were added to the migration automatically because we put them at the end of the rails g model call:
+
+```
+❯ rails generate model article title:string body:text
+```
+
+On the last line of the block is `t.timestamps`. This method defines two additional fields in our table, called created_at and updated_at. When we create or update model objects, these fields will be set respectively.
+
+The structure of our table will look like this:
+
+id | title | body | created_at | updated_at
+---|---|---|---|---
+*|*|*|*|*
+
+To create this table in our application's database, we can run this command:
+```
+❯ rails db:migrate
+```
+
+This command will show us output indicating that the table was created:
+```
+== 20200118233119 CreateArticles: migrating ===================================
+-- create_table(:articles)
+-> 0.0018s
+== 20200118233119 CreateArticles: migrated (0.0018s) ==========================
+```
+
+Now that we have a table in our application's database, we can use the model to interact with this table.
+
+To use the model, we'll use a feature of Rails called the `console`. The `console` allows us write code like we might in `irb`, but the code of our application is available there too.
+
+Let's launch the console with this command:
+```
+❯ rails console
+```
+
+Or, a shorter version
+```
+❯ rails c
+```
+
+When we launch this, we should see an irb prompt:
+```
+Loading development environment (Rails 6.0.2.1)
+
+irb(main):001:0>
+```
+
+In this prompt, we can use our model to initialize a new Article object:
+```
+irb(main):001:0> article = Article.new(title: "Hello Rails", body: "I am on Rails!")
+```
+
+When we use `Article.new`, it will initialize a new Article object in the console. This object is not saved to the database at all, it's just available in the console so far.
+
+To save the object to the database, we need to call save:
+```
+irb(main):002:0> article.save
+```
+
+This command will show us the following output:
+```
+(0.1ms) begin transaction
+Article Create (0.4ms) INSERT INTO "articles" ("title", "body", "created_at", "updated_at") VALUES (?, ?, ?, ?) [["title", "Hello Rails"], ["body", "I am on Rails!"], ["created_at", "2020-01-18 23:47:30.734416"], ["updated_at", "2020-01-18 23:47:30.734416"]] (0.9ms) commit transaction
+=> true
+```
+
+This output shows an `INSERT INTO "articles"...` database query. This means that our article has been successfully inserted into our table.
+
+If we take a look at our article object again, an interesting thing has happened:
+```
+irb(main):003:0> article
+=> #<Article id: 1, title: "Hello Rails", body: "I am on Rails!", created_at: "2020-01-18 23:47:30", updated_at: "2020-01-18 23:47:30">
+```
+
+Our object now has the `id`, `created_at` and `updated_at` fields set. All of this happened automatically for us when we saved this article.
+
+If we wanted to retrieve this article back from the database later on, we can do that with find, and pass that id as an argument:
+```
+irb(main):004:0> article = Article.find(1)
+=> #<Article id: 1, title: "Hello Rails", body: "I am on Rails!", created_at: "2020-01-18 23:47:30", updated_at: "2020-01-18 23:47:30">
+```
+
+A shorter way to add articles into our database is to use Article.create, like this:
+```
+irb(main):005:0> Article.create(title: "Post #2", body: "Still riding the Rails!")
+```
+
+This way, we don't need to call `new` and then `save`.
+
+Lastly, models provide a method to find all of their data:
+```
+irb(main):006:0> articles = Article.all
+#<ActiveRecord::Relation [#<Article id: 1, title: "Hello Rails", body: "I am on Rails!", created_at: "2020-01-18 23:47:30", updated_at: "2020-01-18 23:47:30">, #<Article id: 2, title: "Post #2", body: "Still riding the Rails!", created_at: "2020-01-18 23:53:45", updated_at: "2020-01-18 23:53:45">]>
+```
+
+This method returns an `ActiveRecord::Relation` object, which you can think of as a super-powered array. This array contains both of the topics that we have created so far.
+
+As you can see, models are very helpful classes for interacting with databases within Rails applications. Models are the final piece of the "MVC" puzzle. 
