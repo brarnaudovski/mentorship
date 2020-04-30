@@ -49,14 +49,12 @@ To begin with, let's get some text up on screen quickly. To do this, you need to
 ### Starting up the Web Server
 You actually have a functional Rails application already. To see it, you need to start a web server on your development machine. You can do this by running the following in the blog directory:
 ```
-❯ bin/rails server
+❯ rails server
 ```
 
 This will fire up Puma, a web server distributed with Rails by default. To see your application in action, open a browser window and navigate to `http://localhost:3000`. You should see the Rails default information page:
 
-![Rails welcome logo][rails_welcome]
-
-[rails_welcome]: ./images/rails_welcome.png "Rails Welcome"
+![Rails welcome logo](./images/rails_welcome.png)
 ---
 
 **TIP**: To stop the web server, hit Ctrl+C in the terminal window where it's running. To verify the server has stopped you should see your command prompt cursor again. For most UNIX-like systems including macOS this will be a dollar sign `$`. In development mode, Rails does not generally require you to restart the server; changes you make in files will be automatically picked up by the server.
@@ -318,4 +316,127 @@ irb(main):006:0> articles = Article.all
 
 This method returns an `ActiveRecord::Relation` object, which you can think of as a super-powered array. This array contains both of the topics that we have created so far.
 
-As you can see, models are very helpful classes for interacting with databases within Rails applications. Models are the final piece of the "MVC" puzzle. 
+As you can see, models are very helpful classes for interacting with databases within Rails applications. Models are the final piece of the "MVC" puzzle. Let's look at how we can go about connecting all these pieces together into a cohesive whole.
+
+## Getting Up and Running
+
+Now that you've seen how to create a route, a controller, an action, a view and a model, let's connect these pieces together.
+
+Let's go back to `app/controllers/articles_controller.rb` now. We're going to change the index action here to use our model.
+```ruby
+class ArticlesController < ApplicationController
+  def index
+    @articles = Article.all
+  end
+end
+```
+
+Controller actions are where we assemble all the data that will later be displayed in the view. In this index action, we're calling `Article.all` which will make a query to our database and retrieve all of the articles, storing them in an instance variable: `@articles`.
+
+We're using an instance variable here for a very good reason: instance variables are automatically shared from controllers into views. So to use this `@articles` variable in our view to show all the articles, we can write this code in `app/views/articles/index.html.erb`:
+```html
+<h1>Articles</h1>
+<ul>
+<% @articles.each do |article| %>
+  <li><%= article.title %></li>
+<% end %>
+</ul>
+```
+
+We've now changed this file from using just HTML to using HTML and ERB. ERB is a language that we can use to run Ruby code.
+
+There's two types of ERB tag beginnings that we're using here: `<%` and `<%=`. The `<%` tag means to evaluate some Ruby code, while the `<%=` means to evaluate that code, and then to output the return value from that code.
+
+In this view, we do not want the output of `articles.each` to show, and so we use a `<%`. But we do want each of the articles' titles to appear, and so we use `<%=`.
+
+When we start an ERB tag with either `<%` or `<%=`, it can help to think "I am now writing Ruby, not HTML". Anything you could write in a regular Ruby program, can go inside these ERB tags.
+
+When the view is used by Rails, the embedded Ruby will be evaluated, and the page will show our list of articles. Let's go to `http://localhost:3000` now and see the list of articles:
+
+![Article list](./images/article_list.png)
+
+---
+
+If we look at the source of the page in our browser `http://localhost:3000/`, we'll see this part:
+```html
+<h1>Articles</h1>
+
+<ul>
+  <li>Hello Rails</li>
+  <li>Post #2</li>
+</ul>
+```
+
+This is the HTML that has been output from our view in our Rails application. Here's what's happened to get to this point:
+1. Our browser makes a request: GET `http://localhost:3000`.
+2. The Rails application receives this request.
+3. The router sees that the root route is configured to route to the `ArticlesController`'s *index* action.
+4. The index action uses the `Article` model to find all the articles.
+5. Rails automatically renders the `app/views/articles/index.html.erb` view.
+6. The view contains ERB (Embedded Ruby). This code is evaluated, and plain HTML is returned.
+7. The server sends a response containing that plain HTML back to the browser.
+
+---
+![Application Flowchart](./images/application_flowchart.png)
+
+Full size [chart](https://drive.google.com/a/slicelife.com/file/d/1wKnbJSywrLK5nvpat949lsaqAiRmCJr4/view?usp=sharing)
+
+---
+
+We've now successfully connected all the different parts of our Rails application together: the router, the controller, the action, the model and the view. With this connection, we have finished the first action of our application.
+
+Let's move on to the second action!
+
+## Viewing an Article
+
+For our second action, we want our application to show us the details about an article, specifically the article's title and body:
+```
+Hello Rails
+
+I am on Rails!
+```
+
+We'll start in the same place we started with the index action, which was in `config/routes.rb`. We'll add a new route for this page.
+
+Let's change our routes file now to this:
+```ruby
+Rails.application.routes.draw do
+  root "articles#index"
+  get "/articles", to: "articles#index"
+  get "/articles/:id", to: "articles#show"
+end
+```
+
+This route is another *get* route, but it has something different in it: `:id`. This syntax in Rails routing is called a *parameter*, and it will be available in the *show* action of `ArticlesController` when a request is made.
+
+A request to this action will use a route such as `http://localhost:3000/articles/1` or `http://localhost:3000/articles/2`.
+
+This time, we're still routing to the `ArticlesController`, but we're going to the *show* action of that controller instead of the *index* action.
+
+Let's look at how to add that *show* action to the `ArticlesController`. We'll open `app/controllers/articles_controller.rb` and add it in, under the index action:
+
+```ruby
+class ArticlesController < ApplicationController
+  def index
+    @articles = Article.all
+  end
+
+  def show
+    @article = Article.find(params[:id])
+  end
+end
+```
+
+When a request is made to this `show` action, it will be made to a URL such as `http://localhost:3000/articles/1`. Rails sees that the last part of that route is a dynamic parameter, and makes that parameter available for us in our controller through the method params. We use` params[:id]` to access that parameter, because back in the routes file we called the parameter `:id`. If we used a name like `:article_id` in the routes file, then we would need to use `params[:article_id]` here too.
+
+The show action finds a particular article with that ID. Once it has that, it needs to then display that article's information, which will do by attempting to use a view at `app/views/articles/show.html.erb`. Let's create that file now and add this content:
+```html
+<h1><%= @article.title %></h1>
+
+<p><%= @article.body %></p>
+```
+
+Now when we go to http://localhost:3000/articles/1 we will see the article:
+
+![Article Show](./images/article_show.png)
+---
