@@ -1,0 +1,5 @@
+pandoc ./overview.md --pdf-engine=wkhtmltopdf -o ./overview.pdf
+
+# Using Github Flavored Markdown
+pandoc ./blog_app.md -f gfm --pdf-engine=wkhtmltopdf -o ./blog_app.pdf
+
