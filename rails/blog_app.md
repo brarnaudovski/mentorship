@@ -440,3 +440,324 @@ Now when we go to http://localhost:3000/articles/1 we will see the article:
 
 ![Article Show](./images/article_show.png)
 ---
+
+But in order to navigate to it, we have to manually type in `http://localhost:3000/articles/1`. That seems a bit silly. Let's change our application a little, so that we can navigate to an article by clicking a link from the list of articles.
+
+To add the link to an article, we need to change `app/views/articles/index.html.erb`:
+```html
+<h1>Articles</h1>
+
+<ul>
+  <% @articles.each do |article| %>
+    <li>
+      <a href="articles/<%= article.id %>">
+        <%= article.title %>
+      </a>
+    </li>
+  <% end %>
+</ul>
+
+
+```
+
+This a tag will provide us with a link to the specific article. If we go back to
+`http://localhost:3000/`, we'll see that we can now click on the articles:
+
+![Articles with links](./images/articles_list_with_links.png)
+
+Clicking either of these links will take us to the relevant article.
+
+Rails has a method called `link_to` that can make that linking a little simpler. Let's use this in `app/views/articles/index.html.erb`:
+```html
+<h1>Articles</h1>
+
+<ul>
+  <% @articles.each do |article| %>
+    <li>
+      <%= link_to article.title, "/articles/#{article.id}" %>
+    </li>
+  <% end %>
+</ul>
+```
+
+There we go, that is now a little bit cleaner. Rails has given us a way to shorten this code a little. But what you don't know yet is that this line can be made even simpler.
+
+Rails has a feature called `routing helpers`. These are methods that can be used to
+generate route paths like "/articles/#{article.id}" programatically. We'll use one of these to generate the route for our article.
+
+To set this up, let's go back to `config/routes.rb` and change this line:
+```ruby
+get "/articles/:id", to: "articles#show"
+```
+
+To this:
+```ruby
+get "/articles/:id", to: "articles#show", as: :article
+```
+
+The `:as` option here tells Rails that we want routing helpers for this article route to be available in our application. Rails will then let us use this helper to build that route.
+
+Let's look at how we can use that in `app/views/articles/index.html.erb` now, by changing the end of the `link_to` call to this:
+```html
+<h1>Articles</h1>
+
+<ul>
+  <% @articles.each do |article| %>
+    <li>
+      <%= link_to article.title, article_path(article) %>
+    </li>
+  <% end %>
+</ul>
+```
+
+The `link_to` now assembles its path using the `article_path` helper. This will still generate the same `/articles/:id` route we used earlier, but now it happens programatically instead. Now there is not so much switching happening between HTML and Ruby in this code. We enter Ruby, generate a link, and exit Ruby. The code still does the same thing: it links an article's title to the show page for that article.
+
+We now have an `index` action that lists the articles, and a `show` action that shows the title and body for a specific article. Before we move on, we'll make one more little change: we'll add a "Back" link in `app/views/articles/show.html.erb`:
+```html
+<h1> <%= @article.title %> </h1>
+
+<p> <%= @article.body %> </p>
+
+<%= link_to "Back", root_path %>
+```
+
+This will allow us to navigate back to the list of articles easily. The `root_path` comes also from router helper, which is accessible only if define `root to: ''` option in th routes.rb file.
+
+With that small change done, let's now look at how we can create new articles within this application.
+
+## Creating new article
+
+To have a place to create new articles in our application, we're going to need create a new route, action and view.
+
+We start with the `routes.rb` file to set-up the route:
+```ruby
+Rails.application.routes.draw do
+  get '/articles', to: 'articles#index'
+  get '/articles/new', to: 'articles#new', as: :new_article
+  get '/articles/:id', to: 'articles#show', as: :article
+
+  root to: 'articles#index'
+end
+```
+
+The resource to create new articles will be `/articles/new,` and the route for this has very intentionally been placed above the route for the show action. The reason for this is because routes in a Rails application are matched **top-to-bottom**. If we had `/articles/:id` first, that route would match `/articles/new`, and so if we went to `/articles/new`, the show action would serve that request, not the new action. And so for this reason, we put the new route above the show action.
+
+This `/articles/new` route will send the request to the `new` action within the `ArticlesController`, which we'll see in a minute. We've added the `:as` option here, as we will be using the `new_article_path` helper in a little while to provide a way to navigate to this form.
+
+Next is to define the action inside the controller:
+```ruby
+class ArticlesController < ApplicationController
+  def index
+    @articles = Article.all
+  end
+
+  def show
+    @article = Article.find(params[:id])
+  end
+
+  def new
+  end
+end
+```
+
+We can put the new action under show in the controller, because the order of methods in classes doesn't matter in Ruby.
+
+The last think to successfully complete the route is to create the view, `new.html.erb` file under the `app/views` directory:
+
+```html
+<h1> New Article </h1>
+```
+
+To create a form within this template, you will use a *form builder*.
+```html
+<form action="/articles" method="post">
+  <p>
+    <label for="title">Title</label><br>
+    <input type="text" id="title" name="title" />
+  </p>
+
+  <p>
+    <label for="text">Text</label><br>
+    <textarea name="text" id="text"></textarea>
+  </p>
+
+  <p>
+    <input type="submit" value="Save Article" />
+  </p>
+</form>
+```
+This is an awful lot of typing for building a form. Fortunately, Rails provides helpers for us to simplify matters.
+
+The primary form builder for Rails is provided by a helper method called `form_with`. To use this method, add this code into `app/views/articles/new.html.erb`:
+```html
+<h1>New Article</h1>
+
+<%= form_with scope: :article, local: true do |form| %>
+  <p>
+    <%= form.label :title %>
+    <%= form.text_field :title %>
+  </p>
+
+  <p>
+    <%= form.label :body %>
+    <%= form.text_area :body %>
+  </p>
+
+  <p>
+    <%= form.submit "Save Article" %>
+  </p>
+<% end %>
+```
+
+The `form_with` helper method allows us to *build* a form. The first line of this provides us a block argument called `form`, and then throughout the `form` we use that to build labels and text inputs for our field.
+
+*NOTE*: By default `form_with` submits forms using *Ajax* thereby skipping full page redirects. To make this guide easier to get into we've disabled that with `local: true` for now.
+
+This ERB code that uses `form_with` will output a HTML form that looks very similar to the one we hand-rolled, but there are some key differences. Here's what the `form_with` outputs:
+
+```html
+<form action="/articles/new" accept-charset="UTF-8" method="post">
+  <input type="hidden" name="authenticity_token" value="DIwa34..." />
+
+  <p>
+    <label for="article_title">Title</label><br>
+    <input type="text" name="article[title]" id="article_title" />
+  </p>
+
+  <p>
+    <label for="article_text">Text</label><br>
+    <textarea name="article[text]" id="article_text">
+    </textarea>
+  </p>
+
+  <p>
+    <input type="submit" name="commit" value="Save Article" />
+  </p>
+</form>
+```
+The first key difference is that there is a hidden field called `authenticity_token` at the top. This is a security feature of Rails and it prevents outside people from submitting your forms maliciously using a technique called *Cross Site Request Forgery*.
+
+The labels and fields are mostly the way they were, with a key difference: the `name` fields have an `article[]` wrapping around their values. This wrapping comes from the `scope` argument that we have passed to `form_with`. This wrapping groups all the fields of the form into one hash once they're submitted, and that will make it easy to process once they reach our application.
+
+There's one problem with this form though. If you inspect the HTML that is generated, by viewing the source of the page, you will see that the action attribute for the form is pointing at `/articles/new`.
+This is a problem because this route goes to the very page that you're on right at the moment, and that route should only be used to display the form for a new article.
+
+The form needs to use a different URL in order to go somewhere else. This can be done quite simply with the `:url` option of `form_with`. Typically in Rails, the action that is used for *new* form submissions like this is called "create", and so
+the form should be pointed to that action.
+
+Edit the `form_with` line inside `app/views/articles/new.html.erb` to look like this:
+```ruby
+<%= form_with scope: :article, url: "/articles", local: true do |form| %>
+```
+
+Once the form is submitted, it will send a POST request to `/articles`. If we hit submit on that form now, we'll be shown a *Routing Error*. This error means that we haven't set up a route to handle POST requests to `/articles`. Let's add this new route:
+```ruby
+Rails.application.routes.draw do
+  get '/articles', to: 'articles#index'
+  get '/articles/new', to: 'articles#new', as: :new_article
+  get '/articles/:id', to: 'articles#show', as: :article
+  post '/articles', to: 'articles#create'
+
+  root to: 'articles#index'
+end
+```
+
+**TIP**: The get and post methods that we use in config/routes.rb match HTTP request methods. These methods are conventions used across all HTTP applications -- not just Rails! -- to clearly indicate what sort of action we want to do. A *GET* request is one that retrieves information. A *POST* request is one that adds information.
+
+When Rails receives a POST `/articles` request, it will now route that request to the create action of the `ArticlesController`.
+You now need to create the create action within the `ArticlesController` for this to work.
+
+## Creating Article
+
+We can define a create action within the `ArticlesController` class in `app/controllers/articles_controller.rb`, underneath the new action, as shown:
+```ruby
+class ArticlesController < ApplicationController
+  def new
+  end
+
+  def create
+  end
+end
+```
+
+If you re-submit the form now, you may not see any change on the page. Don't worry!
+
+![New Article Form](./images/new_article_form.png)
+
+This is because Rails by default returns *204 No Content* response for an action if we don't specify what the response should be. We just added the create action but didn't specify anything about how the response should be. In this case, the create action should save our new article to the database.
+
+When a form is submitted, the fields of the form are sent to Rails as *parameters*. Yes, there are the same parameters as we saw earlier when we used `params[:id]`. These parameters can then be referenced inside the controller actions, typically to perform a particular task. To see what these parameters look like, change the create action to this:
+```ruby
+def create
+  render plain: params[:article].inspect
+end
+```
+
+The render method here is taking a very simple hash with a key of `:plain` and value of params`[:article].inspect`. The params method is the object which represents the parameters (or fields) coming in from the form. The params method returns an `ActionController::Parameters` object, which allows you to access the keys of the hash using either strings or symbols. In this situation, the only parameters that matter are the ones from the form. Thanks to the use of the `scope` option on the form, all of our form's parameters are grouped under `params[:article]`.
+
+If you re-submit the form one more time, you'll see something that looks like the following:
+```ruby
+<ActionController::Parameters {"title"=>"Article the Third", "text"=>"The Trilogy Ends"} permitted: false>
+```
+
+This action is now displaying the parameters for the article that are coming in from the form. However, this isn't really all that helpful. Yes, you can see the parameters but nothing in particular is being done with them.
+
+Let's change the create action to use the `Article` model to save the data in the database. Let's change the create action to look like this:
+```ruby
+def create
+  article = Article.new(params[:article])
+  article.save
+
+  redirect_to article_path(article)
+end
+```
+
+*NOTE*: We're not using an instance variable in this action. This is because this action redirects at the end, and since there is a redirection there is no view. So there is no need to make these variables instance variables.
+
+Here we use some familiar code to create a new article -- we saw this previously right after we generated the `Article` model. The call to `new` and then to `save` will create a new article record in the database.
+
+The final line, a `redirect_to`, uses `article_path` to redirect back to the show action.
+
+If you now go to `http://localhost:3000/articles/new` you'll almost be able to create an article. Try it! You should get an error that looks like this:
+
+![Forbidden Attribute Error](./images/forbidden_attribute_error.png)
+
+Rails has several security features that help you write secure applications, and you're running into one of them now. This one is called *strong parameters*, which requires us to tell Rails exactly which parameters are allowed into our controller actions.
+
+Why do you have to bother? The ability to grab and automatically assign all controller parameters to your model in one shot makes the programmer's job easier, but this convenience also allows malicious use. What if this form was a bank account and we allowed just anyone to add in a new field that set their balance to whatever they wished? This would end up bad for us!
+
+We have to define our permitted controller parameters to prevent wrongful mass assignment. In this case, we want to both allow and require the `title` and `body` parameters for valid use of `create`. The syntax for this introduces `require` and `permit`. The change will involve one line in the `create` action:
+```ruby
+  @article = Article.new(params.require(:article).permit(:title, :body))
+```
+
+This code is quite long and is often pulled out into its own method so it can be reused by multiple actions in the same controller. Above and beyond mass assignment issues, the method is often made `private` to make sure it can't be called outside its intended context. Here is the result:
+```ruby
+def create
+  article = Article.new(article_params)
+  article.save
+
+  redirect_to article_path(article)
+end
+
+private
+
+def article_params
+  params.require(:article).permit(:title, :body)
+end
+```
+
+If we attempt to submit our form once more, this time it will succeed and we'll see the article's title and body. The URL should be `http://localhost:3000/articles/3`, indicating that we're now on the `show` action.
+
+Before we wrap up this section, let's add a link to `app/views/articles/index.html.erb` so that we can go to the "New Article" page from there:
+```html
+<h1>Articles</h1>
+
+<%= link_to "New Article", new_article_path %>
+
+.
+.
+(the rest of the code)
+```
+
+Great! That's another two actions finished in our controller: `new` and `create`.
