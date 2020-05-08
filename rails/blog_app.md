@@ -761,3 +761,134 @@ Before we wrap up this section, let's add a link to `app/views/articles/index.ht
 ```
 
 Great! That's another two actions finished in our controller: `new` and `create`.
+
+## Adding Model Validation
+
+Sometimes, in web applications, we want to make sure certain fields are filled in.
+
+The model file, `app/models/article.rb` is about as simple as it can get:
+```ruby
+class Article < ApplicationRecord
+end
+```
+
+There isn't much to this file - but note that the `Article` class inherits from `ApplicationRecord`. `ApplicationRecord` inherits from `ActiveRecord::Base` which supplies a great deal of functionality to your Rails models for free. We've used some of this already: `Article.new`, `Article.all`, `Article.find` and so on.
+
+One of these pieces of functionality is that *Active Record* includes methods to help you validate the data that you send to models and it's easy to use.
+
+Open the app/models/article.rb file and edit it to this:
+```ruby
+class Article < ApplicationRecord
+  validates :title, presence: true, length: { minimum: 5 }
+end
+```
+
+These changes will ensure that all articles have a *title* that is at least five characters long. Rails can validate a variety of conditions in a model, including the presence or uniqueness of columns, their format, and the existence of associated objects. Validations are covered in detail in *Active Record Validations*.
+
+This validation will now only let us save articles that have titles longer than 5 characters. Let's open up the console now and try:
+```
+❯ rails console
+irb(main):001:0> invalid_article = Article.new
+=> #<Article id: nil, title: nil, body: nil, created_at: nil, updated_at: nil>
+irb(main):002:0> invalid_article.save
+=> false
+```
+
+When `save` returns false, it means that the object is invalid and won't be saved to the database. To find out why, we can use this code:
+```
+irb(main):003:0> invalid_article.errors.full_messages
+=> ["Title can't be blank", "Title is too short (minimum is 5 characters)"]
+```
+
+The `errors.full_messages` method chain shows two validation failure messages for our model:
+- The title can't be blank
+- The title is too short (minimum of 5 characters)
+
+That's because we've left the title blank. Now let's see what happens when we save an article with a valid title:
+```
+irb(main):006:0> article = Article.new title: "Getting Started"
+=> #<Article id: nil, title: "Getting Started", body: nil, created_at: nil, updated_at: nil>
+
+irb(main):007:0> article.save
+(0.1ms) begin transaction
+Article Create (0.4ms) INSERT INTO "articles" ("title", "created_at", "updated_at") VALUES (?, ?, ?) [["title", "Getting Started"], ["created_at", "2020-05-07 09:56:25.693465"], ["updated_at", "2020-05-07 09:56:25.693465"]]
+(0.6ms) commit transaction
+=> true
+```
+
+The *save* call here has returned true, indicating that the article has passed validations. Also in the console, we can see an `Article Create` message, that contains an `INSERT INTO` database query, and so we can be confident that this article has now been inserted into our database.
+
+Now that we've seen how to handle invalid and valid articles in the console, let's try using this same technique in our controller.
+
+If you open `app/controllers/articles_controller.rb` again, you'll notice that we don't check the result of calling `@article.save` inside the create action.
+
+If `@article.save` fails in this situation, we need to do something different: we need to show the form again to the user so that they can correct their mistake.
+To do this, let's change the create action to either redirect to the article if the save was successful (the method returns true) or to show the new form again if the save failed:
+```ruby
+def new
+end
+
+def create
+  @article = Article.new(article_params)
+
+  if @article.save
+    redirect_to @article
+  else
+    render :new
+  end
+end
+```
+
+The first thing to note here is that we've now switched from using a local variable article to using an instance variable, `@article`. The reason for this is the else statement. Inside that else we tell Rails to render `:new`. This tells Rails that we want the `app/views/articles/new.html.erb` view to be rendered in the case where our save fails.
+
+Next is to to display the errors. To do that, we'll need to modify `app/views/articles/new.html.erb` to check for error messages. Add this after the header HTML element:
+```html
+<h1> New Article </h1>
+
+<% if @article.errors.any? %>
+<div id="error_explanation">
+  <h2>
+    <%= pluralize(@article.errors.count, "error") %> prohibited this article from being saved:
+  </h2>
+  <ul>
+    <% @article.errors.full_messages.each do |msg| %>
+      <li><%= msg %></li>
+    <% end %>
+  </ul>
+</div>
+<% end %>
+
+... rest of the html
+```
+
+At the top of this view, we're now using `@article.errors` to check for any errors. The `@article` variable here will come from the *create* action, when the `app/views/articles/new.html.erb` view is rendered due to an invalid article.
+
+Inside the check for any errors, we call `pluralize`. `pluralize` is a rails helper that takes a number and a string as its arguments. If the number is greater than one, the string will be automatically pluralized.
+
+If we attempt to go to `http://localhost:3000/articles/new` at this point, we'll see it fail:
+
+![New Article: NoMethodError](./images/new_article_no_method_error.png)
+
+This is happening because we're referring to a variable called `@article` within `app/views/articles/new.html.erb`, but the `new` action does not provide this variable at all.
+
+The path to this error is:
+  1. Browser goes to `http://localhost:3000/articles/new`
+  2. Rails sees `/articles/new` is the route, routes the request to the
+  `ArticlesController`'s new action
+  3. The *new* action is blank, and so Rails defaults to rendering
+  `app/views/articles/new.html.erb`.
+  4. The template attempts to reference `@article,` but it is not defined.
+
+So to make this error go away, we need to define this @article variable.
+We can do it like this in the new action inside app/controllers/articles_controller.rb:
+```ruby
+def new
+  @article = Article.new
+end
+```
+
+This @article is a brand-new `Article` object, and will be perfect for our form. It doesn't have any errors on it -- because we haven't tried saving it yet! -- and so the form will not display any errors.
+
+If we refresh this `http://localhost:3000/articles/new` page, we should see our form renders once again.
+
+And there we have it! We now have the ability to create new articles within our application.
