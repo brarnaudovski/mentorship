@@ -1039,3 +1039,251 @@ On this page, we're currently missing a way to edit an article. This route that 
 ```
 
 This now finishes our adventures in adding the ability to edit an article in this application.
+
+## Using partials to clean up duplication in views
+
+Our *edit* page looks very similar to the *new* page; in fact, they both share almost same code for displaying the form. Rails has yet another great feature that we can use to reduce this duplication and this feature is called *partials*.
+
+Partials allow us to extract out common pieces of views into a file that is then shared across many different views, or in this case, just two views. Let's remove this duplication by using a partial. By convention, partial files are prefixed with an underscore.
+
+Create a new file `app/views/articles/_form.html.erb`. We're going to copy most of `app/views/articles/edit.html.erb` into this new partial file:
+```html
+<% if article.errors.any? %>
+  <div id="error_explanation">
+    <h2>
+      <%= pluralize(article.errors.count, "error") %> prohibited
+        this article from being saved:
+    </h2>
+    <ul>
+      <% article.errors.full_messages.each do |msg| %>
+      <li><%= msg %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<%= form_with model: article, local: true do |form| %>
+  <p>
+    <%= form.label :title %><br>
+    <%= form.text_field :title %>
+  </p>
+
+  <p>
+    <%= form.label :body %><br>
+    <%= form.text_area :body %>
+  </p>
+
+  <p>
+    <%= form.submit %>
+  </p>
+<% end %>
+```
+
+This partial can now be used in both the *new* and *edit* views. Let's update the new view:
+```ruby
+<h1>New Article</h1>
+
+<%= render 'form', article: @article %>
+```
+
+Then do the same for the `app/views/articles/edit.html.erb` view:
+```ruby
+<h1>Edit Article</h1>
+
+<%= render 'form', article: @article %> <%= link_to 'Back', articles_path %>
+```
+
+This *render* call in a view works differently to the *render* call in a controller. Back in the create action for `ArticlesController`, we have this:
+```ruby
+def create
+  @article = Article.new(article_params)
+
+  if @article.save
+    redirect_to @article
+  else
+    render 'new'
+  end
+end
+```
+
+This `render` method call will render a view, not a partial. In this case, it will render the `app/views/articles/new.html.erb` view.
+
+But when we call `render` inside a view, it will render a partial. When we call `render 'form', article: @article` inside our `new.html.erb` and `edit.html.erb` views, this will render the `app/views/articles/_form.html.erb partial`. How does Rails know that we want this particular form partial? It assumes we want the one in the same directory as the current view by default. This is another one of Rails' conventions at work!
+
+The `article: @article` syntax at the end of this line tells Rails that we want to pass the instance variable `@article` to the partial as a *local* variable called `article`.
+
+Inside that partial, we can access whatever the current article is by using the `article` local variable.
+Now, an interesting thing happens here. When this partial is rendered for the *new* action, the form will submit to the *create* action. But when it's rendered for the *edit* action, it will submit to the *update* action. Go ahead and try it.
+How can one piece of code do two things? The way this works lies in the magic of `form_with` and what it outputs, depending on its model option.
+
+When this partial is rendered by the new action, the @article variable is set like this:
+```ruby
+def new
+  @article = Article.new
+end
+```
+
+The `form_with` helper from Rails detects that this object hasn't yet been saved to the database, and therefore assumes we want to display a form for creating a new article.
+If you look at the HTML source from `http://localhost:3000/articles/new`, you'll see the form is configured like this:
+```html
+<form action="/articles" accept-charset="UTF-8" method="post">
+```
+
+When the form is submitted, it will make a `POST /articles` request. This will go to the create action in `ArticlesController`, because that's how our routes are configured:
+```ruby
+post "/articles", to: "articles#create"
+```
+
+Over in the *edit* action, we instead set `@article` like this:
+```ruby
+def edit
+  @article = Article.find(params[:id])
+end
+```
+
+This `@article` represents an article that has already been saved to the database, and so `form_with` behaves different. Let's look at the HTML source from` http://localhost:3000/articles/1/edit` and see:
+```html
+<form action="/articles/1" accept-charset="UTF-8" method="post">
+  <input type="hidden" name="_method" value="patch" />
+```
+
+This is the same `form_with` method call that is running, but it is acting differently. This time, the form is generated with an action of `/articles/1`. The hidden field called `_method` will make Rails do a `PATCH /articles/1` request. If we look in our routes file, we'll see that such a request goes to the update action:
+```ruby
+patch "/articles/:id", to: "articles#update"
+```
+
+This is no coincidence. We have chosen these routes very specifically so that we can follow Rails conventions. The `form_with` helper acts differently depending on if the `@article` has been saved or not, and so we can use this one partial to represent a form in either `new.html.erb` or `edit.html.erb`.
+
+Partials are a very handy feature of Rails that we can use to remove duplication between separate views. And combining them with `form_with` allows us to merge together two forms into one, without sacrificing any of our sanity.
+
+## Deleting Articles
+
+We're now able to see, create, and update articles within our application. The final part that we'll cover for articles in this guide is how to delete them.
+
+In order to edit articles, we provided a link right next to the article's title in app/views/articles/index.html.erb. To delete articles, let's do the same thing:
+```html
+<h1>Articles</h1>
+<%= link_to "New Article", new_article_path %>
+
+<ul>
+  <% @articles.each do |article| %>
+    <li>
+      <%= link_to article.title, article_path(article) %>
+      <%= link_to "Edit", edit_article_path(article) %>
+      <%= link_to "Delete", article_path(article) %>
+    </li>
+  <% end %>
+</ul>
+```
+
+This `link_to` won't delete the article. It will instead take us to the show action in `ArticlesController` and `show` us the article itself. We need to add one extra thing to this link, which is a method option:
+```html
+<%= link_to "Delete", article_path(article), method: :delete %>
+```
+
+This will make the link make a` DELETE /articles/:id` request. The DELETE HTTP method is one that we use when we want to delete things.
+
+We can now refresh this page and click one of these "Delete" links. This request currently won't work, because we don't have a DELETE `/articles/:id` route set up. Let's add this route to `config/routes.rb`:
+```ruby
+Rails.application.routes.draw do
+  root "articles#index"
+
+  get "/articles", to: "articles#index"
+  get "/articles/new", to: "articles#new", as: :new_article
+  get "/articles/:id", to: "articles#show", as: :article
+  post "/articles", to: "articles#create"
+  get "/articles/:id/edit", to: "articles#edit", as: :edit_article
+  patch "/articles/:id", to: "articles#update"
+  delete "/articles/:id", to: "articles#destroy"
+end
+```
+
+This route will now match DELETE `/articles/:id` requests and send them to the *destroy* action in `ArticlesController`. Let's add this action now in the `ArticlesController`:
+```ruby
+def destroy
+  article = Article.find(params[:id])
+  article.destroy
+
+  redirect_to articles_path
+end
+```
+
+The complete `ArticlesController` in the `app/controllers/articles_controller.rb` file should now look like this:
+```ruby
+class ArticlesController < ApplicationController
+  def index
+    @articles = Article.all
+  end
+
+  def show
+    @article = Article.find(params[:id])
+  end
+
+  def new
+    @article = Article.new
+  end
+
+  def create
+    @article = Article.new(article_params)
+
+    if @article.save
+      redirect_to @article
+    else
+      render :new
+    end
+  end
+
+  def edit
+    @article = Article.find(params[:id])
+  end
+
+  def update
+    @article = Article.find(params[:id])
+
+    if @article.update(article_params)
+      redirect_to @article
+    else
+      render :edit
+    end
+  end
+
+  def destroy
+    article = Article.find(params[:id])
+    article.destroy
+
+    redirect_to articles_path
+  end
+
+  private
+
+  def article_params
+    params.require(:article).permit(:title, :body)
+  end
+end
+```
+
+You can call `destroy` on model instances when you want to delete them from the database. Note that we don't need to add a view for this action since we're redirecting back to '/' -- the root of our application.
+
+If we click "Delete" again on our list of articles, we'll each article disappear in turn.
+We might want to be a little mindful here and ask users if they're really sure that they want to delete an article. Having a link so close to "Edit" like this is a recipe for disaster!
+
+To prompt the user, we're going to change the "Delete" link in `app/views/articles/index.html.erb` to this:
+```html
+<%= link_to "Delete", article_path(article), method: :delete,
+  data: {
+    confirm: "Are you sure you want to delete this article?"
+    }
+%>
+```
+
+This data option uses a feature of Rails called Unobtrusive JavaScript. By default, Rails applications come with a little bit of JavaScript for features like this.
+
+When we refresh this page and click "Delete" once again, we'll see a new dialog box appear
+
+![Delete Article Confirmation](./images/delete_article_confirmation.png)
+
+---
+
+If you press "Cancel" on this box, nothing will happen. The article will not be deleted. But if you press "OK", then the article will be deleted. Rails provides this option on links just for links like this "Delete" link. We want people to be really sure that they mean to delete articles before they actually do it!
+
+That is the last of our actions in the `ArticlesController`. We now have ways to **create**, **read**, **update** and **delete** articles. This pattern is so common in Rails applications that it even has its own acronym: **CRUD**: Create, Read, Update and Delete. What we have built here is a CRUD interface for articles.
