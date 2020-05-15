@@ -1287,3 +1287,73 @@ When we refresh this page and click "Delete" once again, we'll see a new dialog 
 If you press "Cancel" on this box, nothing will happen. The article will not be deleted. But if you press "OK", then the article will be deleted. Rails provides this option on links just for links like this "Delete" link. We want people to be really sure that they mean to delete articles before they actually do it!
 
 That is the last of our actions in the `ArticlesController`. We now have ways to **create**, **read**, **update** and **delete** articles. This pattern is so common in Rails applications that it even has its own acronym: **CRUD**: Create, Read, Update and Delete. What we have built here is a CRUD interface for articles.
+
+## Routing for resources
+
+So far, we have not had to write much code to make our application functional. But there's one extra thing that will massively reduce the lines of code you will write in the future, and that thing is called *resource routing*.
+
+Rails has a convention that it follows when it comes to routing. When we list a collection of a resource, such as articles, that list is going to appear under the index action. When we want to see a single resource, such as a single article, that appears at the show action, and so on.
+
+So far, we have been following this convention in Rails without drawing attention too much attention to it. In this section, we're going to draw a lot of attention to it. By following this routing convention, we can simplify the code within `config/routes.rb` drastically. That file currently contains this code:
+```ruby
+Rails.application.routes.draw do
+  root "articles#index"
+  get "/articles", to: "articles#index"
+  get "/articles/new", to: "articles#new", as: :new_article
+  get "/articles/:id", to: "articles#show", as: :article
+  post "/articles", to: "articles#create"
+  get "/articles/:id/edit", to: "articles#edit", as: :edit_article
+  patch "/articles/:id", to: "articles#update"
+  delete "/articles/:id", to: "articles#destroy"
+end
+```
+
+We've been able to define our routes using the root, get, post, patch and delete helpers. But Rails comes with one helper that we haven't seen yet, and that helper is called `resources`.
+
+We can delete most of the code in this routes file and replace it with this method call:
+```ruby
+Rails.application.routes.draw do
+  root "articles#index"
+  resources :articles
+end
+```
+
+This one line replaces all 7 of the routes that we had defined previously. This is one of the parts of Rails that people claim as the most "magical", and hopefully by defining all 7 routes manually first you will gain an appreciation for the elegance of `resources` here.
+
+To see what this has done, we can run this command in the terminal:
+```
+❯ rails routes --controller articles
+```
+or:
+```
+❯ rails routes -c articles
+```
+
+Here is the output of the command:
+```
+❯ rails routes -c articles
+      Prefix Verb   URI Pattern                  Controller#Action
+        root GET    /                            articles#index
+    articles GET    /articles(.:format)          articles#index
+             POST   /articles(.:format)          articles#create
+ new_article GET    /articles/new(.:format)      articles#new
+edit_article GET    /articles/:id/edit(.:format) articles#edit
+     article GET    /articles/:id(.:format)      articles#show
+             PATCH  /articles/:id(.:format)      articles#update
+             PUT    /articles/:id(.:format)      articles#update
+             DELETE /articles/:id(.:format)      articles#destroy
+```
+
+This command shows us four things:
+ - Prefix: The routing helper prefix that can be used to generate this route. For example "article" means article_path can be used.
+ - Verb: The HTTP Verb / method that is used to make this request.
+ - URI pattern: the path of the route that is used to make this request.
+ - Controller & Action: The controller & action that will serve this request.
+
+From this output, we'll be able to tell that a *GET* request to `/articles/new` will go to the ArticlesController's *new* action.
+
+These are all the same routes that we had previously, it's just that we're using one line to generate them now instead of 7.
+
+TIP: In general, Rails encourages using resources objects instead of declaring routes manually. For more information about routing, see [Rails Routing from the Outside In](https://guides.rubyonrails.org/routing.html).
+
+We have now completely finished building the first part of our application.
