@@ -1090,7 +1090,9 @@ Then do the same for the `app/views/articles/edit.html.erb` view:
 ```ruby
 <h1>Edit Article</h1>
 
-<%= render 'form', article: @article %> <%= link_to 'Back', articles_path %>
+<%= render 'form', article: @article %>
+
+<%= link_to 'Back', articles_path %>
 ```
 
 This *render* call in a view works differently to the *render* call in a controller. Back in the create action for `ArticlesController`, we have this:
@@ -1357,3 +1359,357 @@ These are all the same routes that we had previously, it's just that we're using
 TIP: In general, Rails encourages using resources objects instead of declaring routes manually. For more information about routing, see [Rails Routing from the Outside In](https://guides.rubyonrails.org/routing.html).
 
 We have now completely finished building the first part of our application.
+
+## Let's add some styling
+
+To have some styling in our web application we need to write CSS code. CSS is the part of the Web where we can make our application look good.
+But not only that. With the CSS we can make our application responsiveness, which means we can write a CSS rule to reflect on various screen sizes. And also, using CSS we can be sure that our web application looks the same on different browsers.
+
+Knowing of all the demand CSS need to fulfill, we can have a glimpse that this require greater knowledge of CSS.
+
+In this time of period, where the demand to quickly build Web application is huge, we usually depend on other libraries that help as to focus on just the implementation of the design, rather then, worrying if the implementation is the same for all the major web browser. The wheel is already invented. In the CSS world, we have plenty of such CSS libraries to choose from, which can easy our work, and just focus on design implementation.
+
+One such library is [Bulma](https://bulma.io/). It is a very small library and easy to read the documentation and understand the usage of it. But looking at every popular CSS library, we can notice some web elements that are repeating and used most of the time to build a web application. We can go through each of the elements while we are redesigning our Blog app.
+
+### Using a CSS library in a Rails app
+
+Rails is using a Ruby library known as the *Asset Pipeline*. From the documentation:
+> The asset pipeline provides a framework to concatenate and minify or compress JavaScript and CSS assets. It also adds the ability to write these assets in other languages and pre-processors such as CoffeeScript, Sass, and ERB.
+
+Looking further down in the documentation, we can see how we can use a vendor's file in our application, and how and where we can put our custom CSS file (assets).
+
+Vendor assets go to `vendor/assets/stylesheets/_asset_name_here.css`.
+So the first step to use the Bulma CSS file, we need to download the `bulma.css` file from the Bulma website, and copy to the `vendor/assets/stylesheets/` directory.
+
+Next, we need to tell Rails, that we want to use that asset. For that purpose, we need to open `application.css` and add `*= require bulma`:
+```css
+ # omitted code
+ *= require bulma
+ *= require_tree .
+ *= require_self
+```
+
+We can notice that this file has a special syntax, that is why we need to have `*=` before requiring any asset file. The ` *= require_tree .` and ` *= require_self` will tell Rails to automatically import any files under app/assets/stylesheets/ and/or any CSS rule inside the application.css file
+
+### Redesign of the index page
+
+If we start the application and open any page in the browser, we can notice that some of the text is missing from the display. This comes with some predefined styling from Bulma.
+Before we start any design change, we should add a bulma class called `section` which comes as a direct child of `body`. We will add this in a second.
+
+The next idea is to use some elements on top of our page which will be visible across all other pages. Such an element is known as a navigation bar or just `navbar`. Bulma provides CSS for that element:
+> A responsive horizontal navbar that can support images, links, buttons, and dropdowns
+
+Let's copy the example from Bulma, paste on top of our index html page, and adjust for our purposes. We will need only a brand name (on the left side), and we can add a button for a new article on the right side. We can remove all other elements from the example. In addition, we want to implement some Rails method inside of it, for the anchor link to create a new article, and another anchor link on the brand name, which will point to the root path. The code should look like this:
+```html
+<section class="section">
+  <nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="container">
+      <div class="navbar-brand">
+        <%= link_to "My Blog", root_path, class: "navbar-item is-size-1"%>
+
+        <a role="button" class="navbar-burger burger" aria-label="menu" aria-expanded="false" data-target="navbarBasicExample">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </a>
+      </div>
+
+      <div id="navbarBasicExample" class="navbar-menu">
+        <div class="navbar-end">
+          <div class="navbar-item">
+            <div class="buttons">
+              <%= link_to "New Article", new_article_path, class: "button is-primary has-text-weight-bold" %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+</div>
+```
+
+Before explaining the CSS code in this code, I would like to point out of the `link_to` method provided by Rails. We know that this method will create an anchor element for the HTML document. But how to pass a HTML attributes to that element? Simply, by just adding an option hash as a last argument of the method. In our example, that is `class: "button is-primary has-text-weight-bold"`. This will translate to:
+```html
+<a href="...", class="button is-primary has-text-weight-bold">New Article</a>
+```
+
+We use the same way if we want to add/pass other HTML attributes to the anchor element.
+
+Notice also, we add the `section` class as well a `container` class. The role of the `container` class is to center any content horizontally, and mostly comes as a direct child of either `navbar`, `section`, `hero`, `footer` elements.
+
+Because we want to use the same navbar element to every other page, we can make this a partial file and load from the application layout.
+
+A layout defines the surroundings of an HTML page. It's the place to define a common look and feel of your final output. Layout files reside in `app/views/layouts`. By default, for every page, the `application.html.erb` is the default layout file.
+
+We can create a new partial file, `_nav_bar.html.erb`, and stored under `app/views/shared/`:
+```html
+<nav class="navbar" role="navigation" aria-label="main navigation">
+  <div class="container">
+    <div class="navbar-brand">
+      <%= link_to "My Blog", root_path, class: "navbar-item is-size-1"%>
+
+      <a role="button" class="navbar-burger burger" aria-label="menu" aria-expanded="false" data-target="navbarBasicExample">
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+      </a>
+    </div>
+
+    <div id="navbarBasicExample" class="navbar-menu">
+      <div class="navbar-end">
+        <div class="navbar-item">
+          <div class="buttons">
+            <%= link_to "New Article", new_article_path, class: "button is-primary has-text-weight-bold" %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+```
+
+And call this partial from `application.html.erb`
+```html
+  <body>
+    <section class="section">
+      <%= render 'shared/nav_bar' %>
+      <%= yield %>
+    </section>
+  </body>
+```
+
+Please note that we add the `section` class as a direct child of `body`, and will be present for all of the pages. With that code, we moved the initial navigation bar from the `index.html.erb` to a shared directory and used as a partial view.
+
+Going back to our application, we can see now, that we have a navigation bar through all of the pages.
+
+Let's continue to change the design on the index page. We can use bulma *Card* element. This element provides structure to put any other element in a header, content, and footer style.
+We can use this structure to place the Article title into the card header, Article body, into the card content, and our action buttons into the card footer section.
+
+Besides that, we will introduce a new CSS layout in our application. This layout will be primarily to have responsive pages.
+
+Responsiveness is a critical part of a modern web page. It gives a developer to have different styles which depend on the screen size. CSS can pick-up the size of the screen, and apply a different rule, thus different styling. To be able to utilize this feature, most of the CSS frameworks introduce a concept called *Columns*. You can learn more about the columns and the options at bulma website.
+
+The final look of `index.html.erb` will be:
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1>Articles</h1>
+      </div>
+    </div>
+
+    <% @articles.each do |article| %>
+      <div class="column is-6 is-offset-3">
+        <div class="card">
+          <header class="card-header">
+            <p class="card-header-title">
+              <%= article.title %>
+            </p>
+          </header>
+          <div class="card-content">
+            <div class="content">
+              <p><%= article.body %></p>
+            </div>
+          </div>
+          <footer class="card-footer">
+            <%= link_to "Show", article_path(article), class: "card-footer-item" %>
+
+            <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+
+            <%= link_to "Delete", article_path(article), method: :delete,
+                data: { confirm: "Are you sure you want to delete this article?" },
+                class: "card-footer-item" %>
+          </footer>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>
+```
+
+Let's add the same design/structure to our Article show page. We want to do almost the same as the cards in the index page, with one difference: This time we'll move the header form the card and present in a separate HTML element, before the card. We still want to preserve the `container` and the `column` classes for the responsive design:
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1><%= @article.title %></h1>
+      </div>
+    </div>
+
+    <div class="column is-6 is-offset-3">
+      <div class="card">
+        <div class="card-content">
+          <div class="content">
+            <p><%= @article.body %></p>
+          </div>
+        </div>
+        <footer class="card-footer">
+          <%= link_to "Back", root_path, class: "card-footer-item" %>
+
+          <%= link_to "Edit", edit_article_path(@article), class: "card-footer-item" %>
+
+          <%= link_to "Delete", article_path(@article), method: :delete,
+              data: { confirm: "Are you sure you want to delete this article?" },
+              class: "card-footer-item" %>
+        </footer>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+We can notice one additional change form the cards in the index page, and that is, the first button action is changed from Show to Back. The idea is, when we are on the shop page, we want to go back to the index page, and when we are on the index page, we want to show a distinct Article. The other buttons stay the same (update and delete).
+
+Next, we want to change the design of the edit page and the new page. These two pages share the partial called `_form.html.erb`. Let's start with that one first.
+
+Bulma provides classes for a form element. For our purpose, we will use the classes for the labels and the input elements. As well as the button group for submitting the form or canceling the submission. The change applied just to the form element:
+```html
+<%= form_with model: article, local: true do |form| %>
+  <div class="field">
+    <%= form.label :title, class: "label" %>
+    <div class="control">
+      <%= form.text_field :title, class: "input", placeholder: "Title" %>
+    </div>
+  </div>
+
+  <div class="field">
+    <%= form.label :body, class: "label" %>
+
+    <div class="control">
+      <%= form.text_area :body, class: "textarea", placeholder: 'Your body' %>
+    </div>
+  </div>
+
+  <div class="field is-grouped">
+    <div class="control">
+      <%= form.submit "Submit", class: "button is-link" %>
+    </div>
+    <div class="control">
+      <button class="button is-link is-light">Cancel</button>
+    </div>
+  </div>
+<% end %>
+```
+
+We can notice that we miss the action for the Cancel button, but we will fix that shortly. From the new code, we can see the `field` class for every form element we have: title, body, and the button groups. For each of these elements Bulma provides additional classes to make the design of the element. For example we have class `input` for the title input. Class `textarea` for text area type of input, and so on.
+
+The cancel button should be different for the Edit action and the New action. For Edit action, the cancel action should go back to the Article, and the cancel action for the New action, should go back to the root of the page. We can change this by adding a new partial variable that needs to be defined in the `render` method. We can use the same technic, to change the name of the "Submit" label for the button as well:
+```html
+<!-- in _form.html.erb -->
+<div class="field is-grouped">
+  <div class="control">
+    <%= form.submit submit, class: "button is-link" %>
+  </div>
+  <div class="control">
+    <%= link_to "Cancel", cancel_path, class: 'button is-link is-light' %>
+  </div>
+</div>
+```
+```ruby
+# in edit.html.erb
+<%= render 'form',
+  article: @article,
+  submit: 'Update Article',
+  cancel_path: article_path(@article) %>
+```
+```ruby
+# in new.html.erb
+<%= render 'form',
+  article: @article,
+  submit: 'Save Article',
+  cancel_path: root_path %>
+```
+
+At this change, when we see the result in the browser, we can notice that the arrangement of the form is wired, and not align as the other elements in the Index page and the Show page. For that, we need to use the CSS classes `column`, and `columns` as a direct child of `container`.
+
+Before applying these classes we can notice that we can further expand the _form partial to include the heading of the page. The final look for the `_form`, `edit`, and `new` files should be:
+```html
+<!-- in _form.html.erb -->
+<% if article.errors.any? %>
+<div id="error_explanation">
+  <h2>
+    <%= pluralize(article.errors.count, "error") %> prohibited this article from being saved:
+  </h2>
+
+  <ul>
+    <% article.errors.full_messages.each do |msg| %>
+      <li><%= msg %></li>
+    <% end %>
+  </ul>
+</div>
+<% end %>
+
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1><%= heading %></h1>
+      </div>
+    </div>
+
+    <div class="column is-6 is-offset-3">
+      <%= form_with model: article, local: true do |form| %>
+        <div class="field">
+          <%= form.label :title, class: "label" %>
+          <div class="control">
+            <%= form.text_field :title, class: "input", placeholder: "Title" %>
+          </div>
+        </div>
+
+        <div class="field">
+          <%= form.label :body, class: "label" %>
+          <div class="control">
+            <%= form.text_area :body, class: "textarea", placeholder: 'Your body' %>
+          </div>
+        </div>
+
+        <div class="field is-grouped">
+          <div class="control">
+            <%= form.submit submit, class: "button is-link" %>
+          </div>
+          <div class="control">
+            <%= link_to "Cancel", cancel_path, class: 'button is-link is-light' %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
+```
+```ruby
+# in edit.html.erb
+<%= render 'form',
+  article: @article,
+  submit: 'Update Article',
+  cancel_path: article_path(@article),
+  heading: 'Edit Article' %>
+```
+```ruby
+# in new.html.erb
+<%= render 'form',
+  article: @article,
+  submit: 'Save Article',
+  cancel_path: root_path,
+  heading: 'New Article' %>
+```
+
+The missing part in this section is the presentation of the error messages. We can improve this design as well. Bulma gives classes for a message object. We can use these classes to construct the element. Also, we can put those elements into a `column` element to have the responsiveness ready. After the heading part of the `_form.html.erb` and before the form element we can have:
+```html
+<% if article.errors.any? %>
+  <div class="column is-6 is-offset-3">
+    <article class="message is-danger">
+      <div class="message-body">
+        <p><%= pluralize(article.errors.count, "error") %> prohibited this article from being saved:</p>
+        <br>
+        <p>
+        <% article.errors.full_messages.each do |msg| %>
+          <li><%= msg %></li>
+        <% end %>
+        </p>
+      </div>
+    </article>
+  </div>
+<% end %>
+```
