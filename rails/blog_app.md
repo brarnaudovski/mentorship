@@ -1389,7 +1389,16 @@ Next, we need to tell Rails, that we want to use that asset. For that purpose, w
  *= require_self
 ```
 
-We can notice that this file has a special syntax, that is why we need to have `*=` before requiring any asset file. The ` *= require_tree .` and ` *= require_self` will tell Rails to automatically import any files under app/assets/stylesheets/ and/or any CSS rule inside the application.css file
+We can notice that this file has a special syntax, that is why we need to have `*=` before requiring any asset file. The ` *= require_tree .` and ` *= require_self` will tell Rails to automatically import any files under app/assets/stylesheets/ and/or any CSS rule inside the application.css file.
+
+Other option to use any library is by using CDNs directly from the HEAD element.
+
+*A content delivery network (CDN) refers to a geographically distributed group of servers that work together to provide fast delivery of Internet content*
+
+We can use this technic to fetch the `fontawesome` CSS library. Bulma uses this library to present the icons in its elements. Open the `app/views/layouts/application.html.erb` file and add this line under the definition of `javascript_pack_tag`:
+```
+<script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
+```
 
 ### Redesign of the index page
 
@@ -1418,7 +1427,9 @@ Let's copy the example from Bulma, paste on top of our index html page, and adju
         <div class="navbar-end">
           <div class="navbar-item">
             <div class="buttons">
-              <%= link_to "New Article", new_article_path, class: "button is-primary has-text-weight-bold" %>
+              <%= link_to "New Article",
+                          new_article_path,
+                          class: "button is-primary has-text-weight-bold" %>
             </div>
           </div>
         </div>
@@ -1459,7 +1470,9 @@ We can create a new partial file, `_nav_bar.html.erb`, and stored under `app/vie
       <div class="navbar-end">
         <div class="navbar-item">
           <div class="buttons">
-            <%= link_to "New Article", new_article_path, class: "button is-primary has-text-weight-bold" %>
+            <%= link_to "New Article",
+                new_article_path,
+                class: "button is-primary has-text-weight-bold" %>
           </div>
         </div>
       </div>
@@ -1607,6 +1620,7 @@ The cancel button should be different for the Edit action and the New action. Fo
   </div>
 </div>
 ```
+
 ```ruby
 # in edit.html.erb
 <%= render 'form',
@@ -1614,6 +1628,7 @@ The cancel button should be different for the Edit action and the New action. Fo
   submit: 'Update Article',
   cancel_path: article_path(@article) %>
 ```
+
 ```ruby
 # in new.html.erb
 <%= render 'form',
@@ -1678,6 +1693,7 @@ Before applying these classes we can notice that we can further expand the _form
   </div>
 </div>
 ```
+
 ```ruby
 # in edit.html.erb
 <%= render 'form',
@@ -1686,6 +1702,7 @@ Before applying these classes we can notice that we can further expand the _form
   cancel_path: article_path(@article),
   heading: 'Edit Article' %>
 ```
+
 ```ruby
 # in new.html.erb
 <%= render 'form',
@@ -1701,7 +1718,9 @@ The missing part in this section is the presentation of the error messages. We c
   <div class="column is-6 is-offset-3">
     <article class="message is-danger">
       <div class="message-body">
-        <p><%= pluralize(article.errors.count, "error") %> prohibited this article from being saved:</p>
+        <p>
+          <%= pluralize(article.errors.count, "error") %>
+          prohibited this article from being saved:</p>
         <br>
         <p>
         <% article.errors.full_messages.each do |msg| %>
@@ -1713,3 +1732,170 @@ The missing part in this section is the presentation of the error messages. We c
   </div>
 <% end %>
 ```
+
+## Code Improvements
+
+Now that we have successfully implemented CSS design, we can step back for a moment, and look at our code changes. We may notice some style improvements, as well as some code repeating. It may be not obvious at first, but we will try to find the areas of improvement.
+
+Let's start with the *burger* element. This element is only visible in small screen sizes. In this type of screens, it hides all of the navbar elements on the right side of the screen. The way this element is visible in small screen sizes is by applying some CSS code, which comes with Bulma. But we can notice that, when this element is visible, we aren't able to click on it. Or, we can click on it, but it doesn't provide any feedback for the user. This *feedback* is part of the JavaScript language. We are using JavaScript to provide any kind of dynamic in our HTML elements. Bulma, as a CSS library, doesn't come with JavaScript, but it provides some code examples on how we can achieve the click behavior on the *burger* element. At this stage we aren't going in deep with JavaScript, we just going to copy and paste the example.
+
+Before doing that, we need to know how to tell Rails, we want to use another asset in our code. We learn how to use CSS assets using the Rails asset pipeline, but now, we can see another technic that Rails provides. This technic is by using `webpacker` gem, which is a ruby library on top of `webpack`. And `webpack` is a popular and powerful  JavaScript library to bundle and compile JavaScript files and many other asset types. In short, with Rails, you can use the Rails asset pipeline for images, CSS files, and JS files, but you can also use `webpacker` for images, CSS files, and JS files. It can be confusing for a newly Rails developer but you have an option to use whichever option suits you best.
+
+Follow this steps to complete the click action on the *burger* element. But the Bulma code into a new file, called `navBar.js` and save this file under `app/javascript/` path:
+```js
+document.addEventListener('turbolinks:load', () => {
+
+  // Get all "navbar-burger" elements
+  const $navbarBurgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
+
+  // Check if there are any navbar burgers
+  if ($navbarBurgers.length > 0) {
+
+    // Add a click event on each of them
+    $navbarBurgers.forEach( el => {
+      el.addEventListener('click', () => {
+
+        // Get the target from the "data-target" attribute
+        const target = el.dataset.target;
+        const $target = document.getElementById(target);
+
+        // Toggle the "is-active" class on both the "navbar-burger" and the "navbar-menu"
+        el.classList.toggle('is-active');
+        $target.classList.toggle('is-active');
+
+      });
+    });
+  }
+
+});
+```
+
+Next, we want to require this file into the javascript pack. Add this new line into the `app/javascript/packs/application.js` file:
+```js
+require("navBar")
+```
+
+*The term pack, comes from the webpack library*
+
+At this stage, the Rails server should pick-up the changes, the newly created JS document, and add the dynamic part on the *burger* element.
+
+The next improvement, we can do, is to add more CSS style to improve the UX on our page, in particular, when we are presenting modal errors on the article form.
+
+Besides the messages, we are showing to the uses, we can also indicate which input field is invalid. In our example, we want to indicate that the input field for the article title in invalid, when a user tries to submit the form without title or the title is less than five characters long. To indicate which field is incorrect, if we inspect the HTML elements when submitting an invalid form, we can notice that Rails adds additional CSS class attributes on the invalid input field. This class name is `field_with_errors` and the `class` attribute is set on a custom `div` element, which is a parent element of the invalid input element. We can use this class name and write our custom CSS code. We already have the `articles.scss` file, and we can add our custom CSS into this file:
+```css
+.field_with_errors input {
+  border-color: #f14668;
+}
+```
+*The CSS rule defined here, tells to apply a rule on an HTML element of type `input` that is a child element of an HTML element with a attribute `class` and value `field_with_errors`. CSS also provides many ways to define a color value. One of them is to use a hash notation for a color value like `#f14668`*
+
+
+### Stay DRY
+
+If we open the `show.html.erb` and `index.html.erb` side by side, we can notice that we have almost identical code for the article element. Starting from the `div` with class `column is-6 is-offset-3`. Let's try and move this part of code in a separate partial file called `_article.html.erb` under `view/articles` folder, and we are going to use the part of the code from the index file:
+```html
+<div class="column is-6 is-offset-3">
+  <div class="card">
+    <header class="card-header">
+      <p class="card-header-title">
+        <%= article.title %>
+      </p>
+    </header>
+    <div class="card-content">
+      <div class="content">
+        <p><%= article.body %></p>
+      </div>
+    </div>
+    <footer class="card-footer">
+      <%= link_to "Show", article_path(article), class: "card-footer-item" %>
+
+      <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+
+      <%= link_to "Delete", article_path(article), method: :delete,
+          data: { confirm: "Are you sure you want to delete this article?" },
+          class: "card-footer-item" %>
+    </footer>
+  </div>
+</div>
+```
+
+This is a temporary code. If we use the same partial file and try to render from the show action we will have a different design as previously. The different part is where the `card-header` class is, as well the link to "Back" we have in the show view. This link should point "Back" action if we are on the show page, and the link should be "Show" action if we are on the index page.
+
+This kind of branching can be done if we assign a variable when we are calling the partial file whit the `render` method and the same variable in the partial file. Similar as we did for the call towards the `_form` partial. Note that this kind of variable must be present from all of the places we are calling the `render` method. So want if we want to have a special kind of variable? A variable that makes sense to use from only one place when we call the `render` method. In our example, we want to use such a variable. That makes sense to be defined only in the `render` method from the `show.html.erb`. Rails provides a special way to fetch this kind of the variable from the partial view. So for example, if we create a variable `test` with a value `"it works"`, then we should use `local_assigns[:test]` to fetch the value `"it works"`. The `local_assigns` is a special object that we can use in the partials to fetch a variable that is defined only in one place when we call the `render` method.
+
+We can use this technic in the `show.html.erb` and write the `render` method. Please also delete the part of the code where we are going to replace with the partial `_article` file:
+```html
+<%= render @article, show: true %>
+```
+
+This method will render the `_article.html.erb`, and also pass the variable `show` with the value `true`.
+
+And the `index.html.erb`:
+```html
+<% @articles.each do |article| %>
+  <%= render article %>
+<% end %>
+```
+
+We can now notice what we use the `show` variable from one place, and we can use `local_assigns` to fetch the value and do our branching in the `_article` file:
+```html
+<div class="column is-6 is-offset-3">
+  <div class="card">
+    <% unless local_assigns[:show] %>
+      <header class="card-header">
+          <p class="card-header-title">
+            <%= article.title %>
+          </p>
+      </header>
+    <% end %>
+    <div class="card-content">
+      <div class="content">
+        <p><%= article.body %></p>
+      </div>
+    </div>
+    <footer class="card-footer">
+      <% if local_assigns[:show] %>
+        <%= link_to "Back", root_path, class: "card-footer-item" %>
+      <% else %>
+        <%= link_to "Show", article_path(article), class: "card-footer-item" %>
+      <% end %>
+      <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+
+      <%= link_to "Delete", article_path(article), method: :delete,
+          data: { confirm: "Are you sure you want to delete this article?" },
+          class: "card-footer-item" %>
+    </footer>
+  </div>
+</div>
+```
+
+Please take note of the two parts of the code, where we are using the `local_assigns[:show]` to distinguish the HTML part for the show view with the HTML part for the index view.
+
+If we go to the browser, we can notice that the UI is not changed, and we are able to use the partial file to view the Show page and the Index page.
+This can be seen in the server logs as well:
+```
+Started GET "/articles/1" for ::1 at 2020-05-27 20:42:49 +0200
+   (0.1ms)  SELECT sqlite_version(*)
+Processing by ArticlesController#show as HTML
+  Parameters: {"id"=>"1"}
+  Article Load (0.2ms)  SELECT "articles".* FROM "articles" WHERE "articles"."id" = ? LIMIT ?  [["id", 1], ["LIMIT", 1]]
+  ↳ app/controllers/articles_controller.rb:7:in `show'
+  Rendering articles/show.html.erb within layouts/application
+  Rendered articles/_article.html.erb (Duration: 0.7ms | Allocations: 457)
+```
+
+If we go back to the `index.html.erb` for a moment, we can notice we are using the iterator to call individual `article` partial. Rails gives us options to improve this code by the using `collection` option:
+```
+<%= render partial: 'article', collection: @articles %>
+```
+
+*Note that when we want to use the `collection` option we must explicitly use the `partial` option as well, to indicate what partial file we want to render*
+
+When the singular name of the partial matches the plural name in the collection, then we can just use:
+```
+<%= render @articles %>
+```
+
+Rails is clever enough to understand this kind of code, and under the hood, use the iterator and render the `article` partial file.
+
+Moving on to the next chapter :)
