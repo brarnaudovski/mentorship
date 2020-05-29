@@ -850,8 +850,7 @@ Next is to to display the errors. To do that, we'll need to modify `app/views/ar
 <% if @article.errors.any? %>
 <div id="error_explanation">
   <h2>
-    <%= pluralize(@article.errors.count, "error") %> prohibited
-      this article from being saved:
+    <%= pluralize(@article.errors.count, "error") %> prohibited this article from being saved:
   </h2>
   <ul>
     <% @article.errors.full_messages.each do |msg| %>
@@ -946,8 +945,7 @@ The view will contain a form similar to the one we used when creating *new* arti
 <% if @article.errors.any? %>
   <div id="error_explanation">
     <h2>
-      <%= pluralize(@article.errors.count, "error") %> prohibited
-        this article from being saved:
+      <%= pluralize(@article.errors.count, "error") %> prohibited this article from being saved:
     </h2>
     <ul>
       <% @article.errors.full_messages.each do |msg| %>
@@ -1051,8 +1049,7 @@ Create a new file `app/views/articles/_form.html.erb`. We're going to copy most 
 <% if article.errors.any? %>
   <div id="error_explanation">
     <h2>
-      <%= pluralize(article.errors.count, "error") %> prohibited
-        this article from being saved:
+      <%= pluralize(article.errors.count, "error") %> prohibited this article from being saved:
     </h2>
     <ul>
       <% article.errors.full_messages.each do |msg| %>
@@ -1427,9 +1424,7 @@ Let's copy the example from Bulma, paste on top of our index html page, and adju
         <div class="navbar-end">
           <div class="navbar-item">
             <div class="buttons">
-              <%= link_to "New Article",
-                          new_article_path,
-                          class: "button is-primary has-text-weight-bold" %>
+              <%= link_to "New Article", new_article_path, class: "button is-primary has-text-weight-bold" %>
             </div>
           </div>
         </div>
@@ -1470,9 +1465,7 @@ We can create a new partial file, `_nav_bar.html.erb`, and stored under `app/vie
       <div class="navbar-end">
         <div class="navbar-item">
           <div class="buttons">
-            <%= link_to "New Article",
-                new_article_path,
-                class: "button is-primary has-text-weight-bold" %>
+            <%= link_to "New Article", new_article_path, class: "button is-primary has-text-weight-bold" %>
           </div>
         </div>
       </div>
