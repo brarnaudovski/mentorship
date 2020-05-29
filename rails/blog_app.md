@@ -1899,3 +1899,348 @@ When the singular name of the partial matches the plural name in the collection,
 Rails is clever enough to understand this kind of code, and under the hood, use the iterator and render the `article` partial file.
 
 Moving on to the next chapter :)
+
+## Adding Comments
+
+Let's expand this application a little further by adding the ability for users to leave comments on articles.
+
+### Generating a Model
+
+To start with, we're going to generate a model for comments.
+
+We're going to see the same generator that we used before when creating the `Article` model. This time we'll create a `Comment` model to hold a reference to an article. Run this command in your terminal:
+```
+❯ rails g model Comment commenter:string body:text article:references
+```
+
+This command will generate four files:
+```
+invoke active_record
+create db/migrate/[timestamp]_create_comments.rb
+create app/models/comment.rb
+invoke test_unit
+create test/models/comment_test.rb
+create test/fixtures/comments.yml
+```
+
+First, let's take a look at `app/models/comment.rb`:
+```ruby
+class Comment < ApplicationRecord
+  belongs_to :article
+end
+```
+
+This is very similar to the `Article` model that you saw earlier. The difference is the line `belongs_to :article`, which sets up an Active Record association. You'll learn a little about associations in the next section of this guide.
+
+This `belongs_to` was added to our model because we specific `article:references` when we generated this model.
+The references type is a special type that define an association between the model that we're generating and another model. In this case, we're saying that every comment *belongs* to an article.
+
+Let's look at the migration next:
+```ruby
+class CreateComments < ActiveRecord::Migration[6.0]
+  def change
+    create_table :comments do |t|
+      t.string :commenter
+      t.text :body
+      t.references :article, null: false, foreign_key: true
+
+      t.timestamps
+    end
+  end
+end
+```
+
+The `t.references` line creates does a few things:
+- It adds a field called `article_id` to the comments table
+- A database index is added for that column. This will speed up retrieving
+comments for particular articles.
+- The `null: false` option says that in no circumstance can this column be
+set to a NULL value.
+- The `foreign_key: true` option says that this column is linked to the
+articles table, and that the column's values must be represented in the articles table, in the id column. There can be no comments without a related article to match.
+
+Go ahead and run the migration:
+```
+❯ rails db:migrate
+```
+
+Rails is smart enough to only execute the migrations that have not already been run against the current database, so in this case you will just see:
+```
+== CreateComments: migrating =================================================
+-- create_table(:comments)
+-> 0.0115s
+== CreateComments: migrated (0.0119s) ========================================
+```
+
+This migration will create our comments table.
+
+## Associating Models
+
+Active Record associations let you easily declare the relationship between two models. In the case of comments and articles, you could write out the relationships this way:
+- Each comment belongs to one article.
+- One article can have many comments.
+
+In fact, this is very close to the syntax that Rails uses to declare this association. You've already seen the line of code inside the Comment model (app/models/comment.rb) that makes each comment belong to an Article:
+```ruby
+class Comment < ApplicationRecord
+  belongs_to :article
+end
+```
+
+You'll need to edit `app/models/article.rb` to add the other side of the association:
+```RUBY
+class Article < ApplicationRecord
+  has_many :comments
+  validates :title, presence: true,
+end
+```
+
+These two declarations enable a good bit of automatic behavior. Let's explore some of this behavior by starting up a new consol:
+```
+❯ rails c
+```
+
+First, let's find an article:
+```
+irb(main):001:0> article = Article.first
+
+Article Load (0.1ms) SELECT "articles".* FROM "articles" ORDER BY "articles"."id" ASC LIMIT ? [["LIMIT", 1]]
+
+=> #<Article id: 1, title: "Hello Rails", body: "I'm on Rails", created_at: "2020-01-20 05:22:45", updated_at: "2020-01-20 05:22:45">
+```
+
+Next up, let's create a new comment for this article by using the *comments* association method:
+```
+irb(main):002:0> article.comments.create(commenter: "DHH", body: "Welcome to Rails!")
+
+Comment Create (0.4ms) INSERT INTO "comments" ("commenter", "body", "article_id", "created_at", "updated_at") VALUES (?, ?, ?, ?, ?) [["commenter", "DHH"], ["body", "Welcome to Rails!"], ["article_id", 9], ["created_at", "2020-01-20 06:19:33.572961"], ["updated_at", "2020-01-20 06:19:33.572961"]]
+
+=> #<Comment id: 1, commenter: "DHH", body: "Welcome to Rails!", article_id: 1, created_at: "2020-01-20 06:19:33", updated_at: "2020-01-20 06:19:33">
+```
+
+If you look at the list of attributes here, you'll see that both *commenter* and *body* are set the values that we passed in. We have come to expect this behavior from Active Record: we give it attributes, it sets them on the object.
+
+What we haven't seen before is what has happened to `article_id` here. That attribute has been automatically set to the ID of the article object. This is what links that Comment object back to the article.
+
+To find an article's comments, we can do this:
+```
+irb(main):003:0> article.comments
+Comment Load (0.9ms) SELECT "comments".* FROM "comments" WHERE "comments"."article_id" = ? LIMIT ? [["article_id", 9], ["LIMIT", 11]]
+
+=> #<ActiveRecord::Associations::CollectionProxy [#<Comment id: 1,commenter: "DHH", body: "Welcome to Rails!", article_id: 9, created_at: "2020-01-20 06:19:33", updated_at: "2020-01-20 06:19:33">]>
+```
+
+This *comments* method on `Article` objects allows us to work with the comments for any given article.
+
+Similarly, there is an *article* method on comments. Let's see that in action too:
+```
+irb(main):004:0> comment = Comment.first
+
+Comment Load (0.2ms) SELECT "comments".* FROM "comments" ORDER BY "comments"."id" ASC LIMIT ? [["LIMIT", 1]]
+=> #<Comment id: 1, commenter: "DHH", body: "Welcome to Rails!", article_id: 9, created_at: "2020-01-20 06:19:33", updated_at: "2020-01-20 06:19:33">
+
+irb(main):005:0> comment.article
+
+Article Load (0.2ms) SELECT "articles".* FROM "articles" WHERE "articles"."id" = ? LIMIT ? [["id", 9], ["LIMIT", 1]]
+=> #<Article id: 9, title: "dsfsadfasdf", body: "asdfasdfasdf", created_at: "2020-01-20 05:22:45", updated_at: "2020-01-20 05:22:45">
+```
+
+This `article` method is granted to us by the `belongs_to` method call in the Comment model.
+
+### Displaying comments on articles
+
+Now that we can create comments on articles, it would be really useful to display them somewhere. The most appropriate place to do that would be within the `app/views/articles/show.html.erb` view. Let's change this view now to display all of the comments using CSS components:
+```html
+...code omitted...
+<%= render @article, show: true %>
+
+<% @article.comments.each do |comment| %>
+  <div class="column is-5 is-offset-4">
+    <article class="media">
+      <div class="media-content">
+        <div class="content">
+          <p>
+            <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) %></small>
+            <br>
+            <%= comment.body %>
+          </p>
+        </div>
+        <nav class="level is-mobile">
+          <div class="level-left">
+            <a class="level-item">
+              <span class="icon is-small"><i class="fas fa-edit"></i></span>
+            </a>
+            <a class="level-item">
+              <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+            </a>
+          </div>
+        </nav>
+      </div>
+    </article>
+  </div>
+<% end %>
+```
+The new code that we've just added to this view will go through all of the article's comments and display the commenter and the comment that was made. When we go to `http://localhost:3000/articles/1` now, we should see this comment appear.
+
+Note the usage of `time_ago_in_words` method. This is a handy method to display the creation time in a more human readable form, like 2 days ago, or 15 seconds ago.
+
+Well, that was pretty straight forward! Rails has given us an easy way to list all of the article comments, by way of the `has_many` method in the Article model.
+
+### Adding a comment
+
+Now that we have a way to see all of the current comments, let's add a form that lets us create additional comments. To start with, we're going to put this form in `app/views/articles/show.html.erb`, just below the comments we just added:
+```html
+<% @article.comments.each do |comment| %>
+...
+<% end %>
+
+<div class="column is-5 is-offset-4">
+  <article class="media">
+    <div class="media-content">
+      <%= form_with model: [@article, @article.comments.build], local: true do |form| %>
+        <div class="field">
+          <p class="control">
+            <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
+          </p>
+        </div>
+        <div class="field">
+          <p class="control">
+              <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+          </p>
+        </div>
+        <nav class="level">
+          <div class="level-left">
+          </div>
+          <div class="level-right">
+            <div class="level-item">
+              <%= form.submit "Comment", class: 'button is-info' %>
+            </div>
+          </div>
+        </nav>
+      <% end %>
+    </div>
+  </article>
+</div>
+```
+
+This form looks almost like the one in `app/views/articles/_form.html.erb`, but it has one key difference: the `model` key has been passed an array, instead of a single model instance. What will happen here is that the form will build what's called a nested route for the comment.
+
+The second element in that array is `@article.comments.build`. This is a helper method that comes from `has_many`, that is essentially equivalent to this code:
+`Comment.new(article_id: @article.id)`
+
+We're going to be building a new comment for the purposes of saving it to the database, eventually.
+
+If we refresh `http://localhost:3000/articles/1`, we'll see an error message which hints a little bit at this nested route:
+```
+undefined method `article_comments_path' for #<#<Class:0x00007ff93155b310>:0x00007ff9412074b0>
+```
+
+The `form_with` helper here is attempting to use a routing helper called `article_comments_path` to generate the route for the form. This routing helper doesn't exist yet, and we'll create it in a moment. But first, let's talk about how Rails came to be wanting `article_comments_path` in the first place.
+
+When we use form_with's :model option, it combines the class names of the resources we pass it into a routing helper. Back when we were doing `form_with model: @article`, it would see that the class name of `@article` was `Article`. Then, `form_with` would see if this object had been saved to the database before or not. If the object had not been saved, the form would use `articles_path` -- the plural version of the routing helper. If the object had been saved, it would use `article_path` -- the singular version of routing helper.
+
+The same rule applies here. form_with's underlying code checks to see what `@article` is first. It's an Article that has been saved to the database, so the first part of the routing helper is `article`. Then it checks what `@article.comments.build` is. This object is a Comment that has not been saved to the database, so the helper's next component is `comments`. Then we're out of array elements, so `form_with` puts `_path` on the end. This is how we arrive at `article_comments_path`.
+
+This is another one of those excellent Rails conventions you've heard about throughout this guide. And it's one of the more "magical" (or "confusing") aspects of Rails. So don't worry too much if you don't get it first pass.
+
+In order to solve the issue here, we need to add the route that has that routing helper. This time, however, instead of writing seven routes one-at-a-time for comments, just like we did for articles, we're going to use `resources` again.
+
+Open up the `config/routes.rb` file again, and edit it as follows:
+```ruby
+Rails.application.routes.draw do
+  root "articles#index"
+  resources :articles do
+    resources :comments
+  end
+end
+```
+
+This creates comments as a *nested resource* within `articles`. This is another part of capturing the hierarchical relationship that exists between articles and comments. By nesting comments inside of articles like this, this will give us the `article_comments_path` helper that our form is expecting.
+
+We can verify this by going into a terminal and running:
+```
+❯ rails routes -c comments
+```
+
+And we'll see these routes:
+```
+              Prefix Verb   URI Pattern                                       Controller#Action
+    article_comments GET    /articles/:article_id/comments(.:format)          comments#index
+                     POST   /articles/:article_id/comments(.:format)          comments#create
+ new_article_comment GET    /articles/:article_id/comments/new(.:format)      comments#new
+edit_article_comment GET    /articles/:article_id/comments/:id/edit(.:format) comments#edit
+     article_comment GET    /articles/:article_id/comments/:id(.:format)      comments#show
+                     PATCH  /articles/:article_id/comments/:id(.:format)      comments#update
+                     PUT    /articles/:article_id/comments/:id(.:format)      comments#update
+                     DELETE /articles/:article_id/comments/:id(.:format)      comments#destroy
+```
+
+The `article_comments` routing helper is the first line. We can see from this routing helper that it will generate the following path: `/articles/:article_id/comments`
+
+We can see this in action if we go back to `http://localhost:3000/articles/1` and inspect the page's HTML source again. We'll see the form has that route as its action attribute:
+```html
+<form action="/articles/9/comments" accept-charset="UTF-8" method="post">
+```
+
+When we fill out the comment form and click "Create Comment", we'll now see
+that the `CommentsController` is missing.
+
+### Generating a Controller
+
+To fix this issue, we will need to generate the `CommentsController`. Let's do that now:
+```
+❯ rails g controller comments
+```
+
+This creates four files and one empty directory:
+- app/controllers/comments_controller.rb
+- app/views/comments/
+- test/controllers/comments_controller_test.rb
+- app/helpers/comments_helper.rb
+- app/assets/stylesheets/comments.scss
+
+If we attempt to submit the form again, we'll see that the `create` action is missing in this new controller.
+
+Let's wire up the create in `app/controllers/comments_controller.rb`:
+```ruby
+class CommentsController < ApplicationController
+  def create
+    article = Article.find(params[:article_id])
+
+    comment = article.comments.build(comment_params)
+
+    comment.save
+    redirect_to article
+  end
+
+  private
+
+  def comment_params
+    params.require(:comment).permit(:commenter, :body)
+  end
+end
+```
+
+You'll see a bit more complexity here than you did in the controller for articles.
+
+That's a side-effect of the nesting that you've set up. Each request for a comment has to keep track of the article to which the comment is attached, thus the initial call to the find method of the Article model to get the article in question.
+
+But where did we get the idea for `article_id` from? Well, if we look at our route again with:
+```
+❯ rails routes -c comments
+```
+
+Then we'll see:
+```
+article_comments GET    /articles/:article_id/comments(.:format)
+```
+
+The colon before `:article_id` indicates that this part of the URL will be available as `params[:article_id]` in our controller. This is why we're using `:article_id` here, and not `:id`.
+
+In addition, the code takes advantage of some of the methods available for an association. We use the create method on `article.comments` to create and save the comment. This will automatically link the comment so that it belongs to that particular article, just as we saw earlier when we created a comment in the Rails console.
+
+Once we have made the new comment, we send the user back to the original article using the `redirect_to article_path(article)` helper, or the short magic one `redirect_to article`. As we have already seen, this calls the show action of the `ArticlesController` which in turn renders the `show.html.erb` template.
+
+If we fill out the comment form again, we will see our comment appear.
+
+Now you can add articles and comments to your blog and have them show up in the right places.
