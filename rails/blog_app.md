@@ -2237,3 +2237,109 @@ Once we have made the new comment, we send the user back to the original article
 If we fill out the comment form again, we will see our comment appear.
 
 Now you can add articles and comments to your blog and have them show up in the right places.
+
+### Comment - Stay DRY
+
+We used this technic to clean up some code from the article view, and let's use the same technic to clean up the comment view code. In the article show view, we can notice a part of the code, that easily can be extracted to a separate view partial. The rendering of the comments and the rendering of the comment form are the first candidates.
+
+We can create this view partial files under the `view/comments` folder. Go on and create a partial called `_comment.html.erb`:
+```html
+<div class="column is-5 is-offset-4">
+  <article class="media">
+    <div class="media-content">
+      <div class="content">
+        <p>
+          <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) %></small>
+          <br>
+          <%= comment.body %>
+        </p>
+      </div>
+      <nav class="level is-mobile">
+        <div class="level-left">
+          <a class="level-item">
+            <span class="icon is-small"><i class="fas fa-edit"></i></span>
+          </a>
+          <a class="level-item">
+            <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+          </a>
+        </div>
+      </nav>
+    </div>
+  </article>
+</div>
+```
+
+And a `_form.html.erb`:
+```html
+<div class="column is-5 is-offset-4">
+  <article class="media">
+    <div class="media-content">
+      <%= form_with model: [article, comment], local: true do |form| %>
+        <div class="field">
+          <p class="control">
+            <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
+          </p>
+        </div>
+        <div class="field">
+          <p class="control">
+              <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+          </p>
+        </div>
+        <nav class="level">
+          <div class="level-left">
+          </div>
+          <div class="level-right">
+            <div class="level-item">
+              <%= form.submit "Comment", class: 'button is-info' %>
+            </div>
+          </div>
+        </nav>
+      <% end %>
+    </div>
+  </article>
+</div>
+```
+
+Note that we are using partial locals, like `comment` that will be passed as an option from the `render` method. Also, we did a change in how we construct the `model` in the `form_with`. Instead of directly calling an article object, we can call the article object from the comment object. This is the same object.
+
+Now go back to the `app/views/articles/show.html.erb` and use the `render` method to render the view partials:
+```ruby
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1><%= @article.title %></h1>
+      </div>
+    </div>
+
+    <%= render @article, show: true %>
+
+    <%= render @comments %>
+
+    <%= render 'comments/form', article: @article, comment: @comment %>
+  </div>
+</div>
+```
+
+Besides the newly created instance variables, nothing new here. We are using `<%= render @comments %>` to render a collection of elements constructed from the `Comment` model. This is the same method used to render a collection of articles from the Article index page.
+
+You can notice two new instance variables in the view: `@comments` and `comment`.
+Those two, are defined in the `ArticlesController` to simplify the view. So let's add them:
+```ruby
+class ArticlesController < ApplicationController
+  def index
+    @articles = Article.all
+  end
+
+  def show
+    @article = Article.find(params[:id])
+    @comments = @article.comments.order(created_id: :desc)
+    @comment = Comment.new
+  end
+
+  # code omitted
+end
+```
+
+This is actually an improvement over the previous code. Now the comments are ordered by the date of creation in descending order. Also, we are using `Comment.new` for the `@comment`, instead of the `@article.comments.build`. As it turns out, defining this code inside the controller will add an *empty* element to the `@article.comments` collection, and Rails will try to render an *empty* comment (a comment that is not saved into the DB). On the other hand, we are using this type of object, only to build the create path for the comment. The `article_comments_path` one.
+Remember that, when we want to build a URL path for the creation of any object, we are using the and *empty* object from the Model, to indicate that the object doesn't exist in the DB. This will tell Rails to build an URL path to create a method. Thus, just using `Comment.new` will trick the implementation.
