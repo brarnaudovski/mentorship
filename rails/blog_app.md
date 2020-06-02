@@ -2343,3 +2343,36 @@ end
 
 This is actually an improvement over the previous code. Now the comments are ordered by the date of creation in descending order. Also, we are using `Comment.new` for the `@comment`, instead of the `@article.comments.build`. As it turns out, defining this code inside the controller will add an *empty* element to the `@article.comments` collection, and Rails will try to render an *empty* comment (a comment that is not saved into the DB). On the other hand, we are using this type of object, only to build the create path for the comment. The `article_comments_path` one.
 Remember that, when we want to build a URL path for the creation of any object, we are using the and *empty* object from the Model, to indicate that the object doesn't exist in the DB. This will tell Rails to build an URL path to create a method. Thus, just using `Comment.new` will trick the implementation.
+
+
+### Fontawesome - CSS library
+
+We are using the Fontawesome library to present any icon elements in our views. The usage of this library comes as Bulma suggestion. Most of the Bulma classes for icon elements are using Fontawesome. But in order to use such type of classes, we need to explicitly use the Fontawesome library.
+
+The way we use the library is to make use as a script element with source pointing to a CDN file like: `<script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>`
+
+This is a valid way to import third-party libraries, but we are seeing some issues with it. You may notice that we need to manually refresh some of the pages, where we are using the icon elements, in order to see the icons itself. You can try to view an article that has comments. At first, you may not be able to see the icons for delete and edit. You'll need to refresh the page in order to render it properly. This problem comes off the special fonts which Fontawesome is using. This type of web fonts comes together with the library and needs to be pre-compiled before using it in our views. This is a task for Rails. In addition to this, the path of the font is defined in one of the sass files of the library, and it is hardcoded. Meaning it is not dynamic, and it depends on the naming and location of the font files. The change can be easily done by ourselves, but this applies to support this change across any further versions of this library. We need somehow, to re-apply the change whenever we use a different version of the library. In this case, we can rely on the Ruby/Rails community, find a ruby library that wraps the Fontawesome library, and use it in our project. By using a gem we are no longer have the responsibility to apply custom changes whenever a new version of this library is out. We just need to make `bundle update *gem*` and we are safe.
+
+The [`font-awesome-sass`](https://github.com/FortAwesome/font-awesome-sass) is one of the many gems that wraps the Fontawesome library into a ruby library. We can use this library in our project. In order to do that, we need to follow the gem's instruction and apply the changes:
+In Gemfile before `group :development, :test` block we can add:
+```ruby
+# Assets
+gem 'font-awesome-sass', '~> 5.13.0'
+```
+
+Then run:
+```
+❯ bundle install
+```
+
+This will update the `Gemfile.lock`.  If the gem is successfully installed, we need to call the Rails asset to use this library.
+
+Create a new file `fontawesome.scss` under `app/assets/stylesheets` folder and write:
+```css
+@import "font-awesome-sprockets";
+@import "font-awesome";
+```
+
+The last step is to delete the script tag pointing to `https://use.fontawesome.com/releases/v5.3.1/js/all.js` from the `app/views/layouts/application.html.erb`.
+
+That's all. Reload the server, and we are able to view the icons, without any issues.
