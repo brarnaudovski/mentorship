@@ -2376,3 +2376,51 @@ Create a new file `fontawesome.scss` under `app/assets/stylesheets` folder and w
 The last step is to delete the script tag pointing to `https://use.fontawesome.com/releases/v5.3.1/js/all.js` from the `app/views/layouts/application.html.erb`.
 
 That's all. Reload the server, and we are able to view the icons, without any issues.
+
+## Deleting Comments
+
+Another important feature of a blog is being able to delete spam comments. To do this, we need to implement a link of some sort in the view and a *destroy* action in the *CommentsController*.
+
+So first, let's add the delete link in the `app/views/comments/_comment.html.erb` partial. Replace the anchor element for the deletion:
+```html
+<%= link_to article_comment_path(comment.article, comment), method: :delete , class: "level-item", data: { confirm: "Are you sure you want to delete this comment?" } do %>
+  <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+<% end %>
+```
+
+Clicking this new "Destroy Comment" link will fire off a DELETE /articles/:article_id/comments/:id to our CommentsController, which can then use this to find the comment we want to delete. Right now, the destroy action that matches that route is missing, and so we will see errors if we attempt to delete a comment.
+
+So let's add a destroy action to our Comments controller
+```ruby
+def destroy
+  comment = Comment.find(params[:id])
+  comment.destroy
+
+  redirect_to comment.article
+end
+```
+
+The *destroy* action will find the comment we are looking at, by using comment, and then remove it from the database and send us back to the show action for the article.
+
+If we attempt to delete a comment again, this time it will disappear.
+
+## Deleting Associated Objects
+
+If you delete an article, its associated comments will also need to be deleted, otherwise we would see an `ActiveRecord::InvalidForeignKey` error happen.
+
+This error happens because the database will not allow comments to be without an associated article, due to this line in the `db/migrate/[timestamp]_create_comments.rb` migration:
+```ruby
+t.references :article, null: false, foreign_key: true
+```
+
+The *foreign_key* option on this line, when set to `true`, says that the `article_id` column within the `comments` table must have a matching `id` value in the `articles` table. If a situation arises where this *might* happen, the database raises a *foreign key constraint* error, which is what we're seeing here.
+
+To avoid this issue, we need to give our `Article`'s comments association one extra option, called `dependent`. Let's change app/models/article.rb to this:
+```ruby
+class Article < ApplicationRecord
+  has_many :comments, dependent: :destroy
+  validates :title, presence: true, length: { minimum: 5 }
+end
+```
+
+Now when an article is deleted, all of its comments will be deleted too, and we will avoid having a foreign key constraint error happen.
