@@ -21,3 +21,8 @@ Short direction:
  - Consider to use `git` to track the files/changes. In addition of `git`, create new repo in Github and attach this project to Github.
  - Create the controller and the views for the *Twitter* resource. If you know upfront what action you'll need in the controller, you may use the `rails generate controller` command to scaffold the controller and the views.
 
+Additional tasks:
+ - Add model validation for the tweets. We want the tweet *body* to be present, and to be maximum 140 character long
+ - Use CSS framework of your choice. You should continue with Bulma for start, and the UI design is up to you
+ - Create a new model called *Comment* with *commenter* and a *body* attributes, which should be in a relation with *Tweet*. One tweet can have many comments, and a comment belongs to a tweet. (Although in the real word, tweet comments are just a tweet, but let's stick with a different model). **Note**: A *comment* cannot exist in the DB if the associated *tweet* is deleted
+ - Add option to delete a comment.
