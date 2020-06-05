@@ -1967,6 +1967,43 @@ Rails is smart enough to only execute the migrations that have not already been 
 
 This migration will create our comments table.
 
+
+### Fontawesome - CSS library
+
+We are using the Fontawesome library to present any icon elements in our views. The usage of this library comes as Bulma suggestion. Most of the Bulma classes for icon elements are using Fontawesome. But in order to use such type of classes, we need to explicitly use the Fontawesome library.
+
+The way we use the library is to make use as a script element with source pointing to a CDN file like: `<script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>`
+
+This is a valid way to import third-party libraries, but we are seeing some issues with it. You may notice that we need to manually refresh some of the pages, where we are using the icon elements, in order to see the icons itself.
+
+This problem comes off the special fonts which Fontawesome is using. This type of web fonts comes together with the library and needs to be pre-compiled before using it in our views. This is a task for Rails. In addition to this, the path of the font is defined in one of the sass files of the library, and it is hardcoded. Meaning it is not dynamic, and it depends on the naming and location of the font files. The change can be easily done by ourselves, but this applies to support this change across any further versions of this library.
+
+We need somehow, to re-apply the change whenever we use a different version of the library. In this case, we can rely on the Ruby/Rails community, find a ruby library that wraps the Fontawesome library, and use it in our project. By using a gem we are no longer have the responsibility to apply custom changes whenever a new version of this library is out. We just need to make `bundle update *gem*` when we need, and we are safe.
+
+The [`font-awesome-sass`](https://github.com/FortAwesome/font-awesome-sass) is one of the many gems that wraps the Fontawesome library into a ruby library. We can use this library in our project. In order to do that, we need to follow the gem's instruction and apply the changes:
+In Gemfile before `group :development, :test` block we can add:
+```ruby
+# Assets
+gem 'font-awesome-sass', '~> 5.13.0'
+```
+
+Then run:
+```
+❯ bundle install
+```
+
+This will update the `Gemfile.lock`.  If the gem is successfully installed, we need to call the Rails asset to use this library.
+
+Create a new file `fontawesome.scss` under `app/assets/stylesheets` folder and write:
+```css
+@import "font-awesome-sprockets";
+@import "font-awesome";
+```
+
+The last step is to delete the script tag pointing to `https://use.fontawesome.com/releases/v5.3.1/js/all.js` from the `app/views/layouts/application.html.erb`.
+
+That's all. Reload the server, and we are able to view the icons, without any issues.
+
 ## Associating Models
 
 Active Record associations let you easily declare the relationship between two models. In the case of comments and articles, you could write out the relationships this way:
@@ -2053,7 +2090,7 @@ Now that we can create comments on articles, it would be really useful to displa
       <div class="media-content">
         <div class="content">
           <p>
-            <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) %></small>
+            <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) ago %></small>
             <br>
             <%= comment.body %>
           </p>
@@ -2081,62 +2118,36 @@ Well, that was pretty straight forward! Rails has given us an easy way to list a
 
 ### Adding a comment
 
-Now that we have a way to see all of the current comments, let's add a form that lets us create additional comments. To start with, we're going to put this form in `app/views/articles/show.html.erb`, just below the comments we just added:
+Now that we have a way to see all of the current comments, let's add a form that lets us create additional comments.
+
+To start with, we're going to create additional button in the article card element, alongside *Show*, *Edit* and *Delete*.
+This button link, should be a link to create a new comment.
+
+In `app/views/articles/_article.html.erb` partial file, add this in the button group section. The footer section of the card element should look like
 ```html
-<% @article.comments.each do |comment| %>
-...
-<% end %>
+... code omitted
 
-<div class="column is-5 is-offset-4">
-  <article class="media">
-    <div class="media-content">
-      <%= form_with model: [@article, @article.comments.build], local: true do |form| %>
-        <div class="field">
-          <p class="control">
-            <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
-          </p>
-        </div>
-        <div class="field">
-          <p class="control">
-              <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
-          </p>
-        </div>
-        <nav class="level">
-          <div class="level-left">
-          </div>
-          <div class="level-right">
-            <div class="level-item">
-              <%= form.submit "Comment", class: 'button is-info' %>
-            </div>
-          </div>
-        </nav>
-      <% end %>
-    </div>
-  </article>
-</div>
+<footer class="card-footer">
+  <% if local_assigns[:show] %>
+    <%= link_to "Back", root_path, class: "card-footer-item" %>
+  <% else %>
+    <%= link_to "Show", article_path(article), class: "card-footer-item" %>
+  <% end %>
+  <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+
+  <%= link_to "Delete", article_path(article), method: :delete,
+      data: { confirm: "Are you sure you want to delete this article?" },
+      class: "card-footer-item" %>
+
+  <a href="" class="card-footer-item"> New Comment </a>
+</footer>
 ```
 
-This form looks almost like the one in `app/views/articles/_form.html.erb`, but it has one key difference: the `model` key has been passed an array, instead of a single model instance. What will happen here is that the form will build what's called a nested route for the comment.
+We can see that we are using an empty anchor link for now. We aren't sure what would be the appropriate link we want to create. What we know is that this comment should be created in an article association. Similar like we were testing in the rails console.
 
-The second element in that array is `@article.comments.build`. This is a helper method that comes from `has_many`, that is essentially equivalent to this code:
-`Comment.new(article_id: @article.id)`
+Following the specification of the REST architecture, when we want to present a resource path, which includes some sort of association between two resources, it should look like: `/user/1/pictures`. This resource path indicates a *picture* collection of a given *user* (user with id 1). And the `pictures` is a nested resource inside the `user` resource.
 
-We're going to be building a new comment for the purposes of saving it to the database, eventually.
-
-If we refresh `http://localhost:3000/articles/1`, we'll see an error message which hints a little bit at this nested route:
-```
-undefined method `article_comments_path' for #<#<Class:0x00007ff93155b310>:0x00007ff9412074b0>
-```
-
-The `form_with` helper here is attempting to use a routing helper called `article_comments_path` to generate the route for the form. This routing helper doesn't exist yet, and we'll create it in a moment. But first, let's talk about how Rails came to be wanting `article_comments_path` in the first place.
-
-When we use form_with's :model option, it combines the class names of the resources we pass it into a routing helper. Back when we were doing `form_with model: @article`, it would see that the class name of `@article` was `Article`. Then, `form_with` would see if this object had been saved to the database before or not. If the object had not been saved, the form would use `articles_path` -- the plural version of the routing helper. If the object had been saved, it would use `article_path` -- the singular version of routing helper.
-
-The same rule applies here. form_with's underlying code checks to see what `@article` is first. It's an Article that has been saved to the database, so the first part of the routing helper is `article`. Then it checks what `@article.comments.build` is. This object is a Comment that has not been saved to the database, so the helper's next component is `comments`. Then we're out of array elements, so `form_with` puts `_path` on the end. This is how we arrive at `article_comments_path`.
-
-This is another one of those excellent Rails conventions you've heard about throughout this guide. And it's one of the more "magical" (or "confusing") aspects of Rails. So don't worry too much if you don't get it first pass.
-
-In order to solve the issue here, we need to add the route that has that routing helper. This time, however, instead of writing seven routes one-at-a-time for comments, just like we did for articles, we're going to use `resources` again.
+With this in mind, the nesting of the resources, we can build our resources to be like `article/1/comments`. This can be achieved by using nested routes in the route file. This time, however, instead of writing seven routes one-at-a-time for comments, just like we did for articles, we're going to use `resources` again.
 
 Open up the `config/routes.rb` file again, and edit it as follows:
 ```ruby
@@ -2148,7 +2159,7 @@ Rails.application.routes.draw do
 end
 ```
 
-This creates comments as a *nested resource* within `articles`. This is another part of capturing the hierarchical relationship that exists between articles and comments. By nesting comments inside of articles like this, this will give us the `article_comments_path` helper that our form is expecting.
+This creates comments as a *nested resource* within `articles`. This is another part of capturing the hierarchical relationship that exists between *articles* and *comments*. By nesting comments inside of articles like this, this will give us the `new_article_comment_path` helper that our link is expecting.
 
 We can verify this by going into a terminal and running:
 ```
@@ -2168,15 +2179,29 @@ edit_article_comment GET    /articles/:article_id/comments/:id/edit(.:format) co
                      DELETE /articles/:article_id/comments/:id(.:format)      comments#destroy
 ```
 
-The `article_comments` routing helper is the first line. We can see from this routing helper that it will generate the following path: `/articles/:article_id/comments`
+The `new_article_comment` routing helper is in the third line.
 
-We can see this in action if we go back to `http://localhost:3000/articles/1` and inspect the page's HTML source again. We'll see the form has that route as its action attribute:
+Go back to `app/views/articles/_article.html.erb` partial file and adjust the link, to use this helper:
 ```html
-<form action="/articles/9/comments" accept-charset="UTF-8" method="post">
+... code omitted
+
+<footer class="card-footer">
+  <% if local_assigns[:show] %>
+    <%= link_to "Back", root_path, class: "card-footer-item" %>
+  <% else %>
+    <%= link_to "Show", article_path(article), class: "card-footer-item" %>
+  <% end %>
+  <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+
+  <%= link_to "Delete", article_path(article), method: :delete,
+      data: { confirm: "Are you sure you want to delete this article?" },
+      class: "card-footer-item" %>
+
+  <%= link_to "New Comment", new_article_comment_path(article), class: "card-footer-item" %>
+</footer>
 ```
 
-When we fill out the comment form and click "Create Comment", we'll now see
-that the `CommentsController` is missing.
+When we click on the "New Comment" link, we'll see that the `CommentsController` is missing.
 
 ### Generating a Controller
 
@@ -2192,24 +2217,13 @@ This creates four files and one empty directory:
 - app/helpers/comments_helper.rb
 - app/assets/stylesheets/comments.scss
 
-If we attempt to submit the form again, we'll see that the `create` action is missing in this new controller.
-
-Let's wire up the create in `app/controllers/comments_controller.rb`:
+If we attempt to submit the form again, we'll see that the `new` action is missing in this new controller. Alongside with the action we'll create the appropriate view file.
+In the controller:
 ```ruby
 class CommentsController < ApplicationController
-  def create
-    article = Article.find(params[:article_id])
-
-    comment = article.comments.build(comment_params)
-
-    comment.save
-    redirect_to article
-  end
-
-  private
-
-  def comment_params
-    params.require(:comment).permit(:commenter, :body)
+  def new
+    @article = Article.find(params[:article_id])
+    @comment = @article.comments.build
   end
 end
 ```
@@ -2230,7 +2244,90 @@ article_comments GET    /articles/:article_id/comments(.:format)
 
 The colon before `:article_id` indicates that this part of the URL will be available as `params[:article_id]` in our controller. This is why we're using `:article_id` here, and not `:id`.
 
-In addition, the code takes advantage of some of the methods available for an association. We use the create method on `article.comments` to create and save the comment. This will automatically link the comment so that it belongs to that particular article, just as we saw earlier when we created a comment in the Rails console.
+And in the new.html.erb file we want to implement the form to create a comment:
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1>New Article Comment</h1>
+      </div>
+    </div>
+
+    <div class="column is-6 is-offset-3">
+      <article class="media">
+        <div class="media-content">
+          <%= form_with model: [@article, @comment], local: true do |form| %>
+            <div class="field">
+              <p class="control">
+                <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
+              </p>
+            </div>
+            <div class="field">
+              <p class="control">
+                  <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+              </p>
+            </div>
+            <nav class="level">
+              <div class="level-left">
+              </div>
+              <div class="level-right">
+                <div class="level-item">
+                  <%= form.submit "Create", class: 'button is-info' %>
+                </div>
+                <div class="level-item">
+                  <%= link_to "Cancel", article_path(@article), class: 'button is-light' %>
+                </div>
+              </div>
+            </nav>
+          <% end %>
+        </div>
+      </article>
+    </div>
+  </div>
+</div>
+```
+
+This form looks almost like the one in `app/views/articles/_form.html.erb`, but it has one key difference: the `model` key has been passed an array, instead of a single model instance. What will happen here is that the form will build what's called a nested route for the comment.
+
+The second element in that array is `@comment`, which is defined in the controller as: `@article.comments.build`. This is a helper method that comes from `has_many`, that is essentially equivalent to this code:
+`Comment.new(article_id: @article.id)`
+
+We're going to be building a new comment for the purposes of saving it to the database, eventually.
+When we use `form_with`'s `:model` option, it combines the class names of the resources we pass it into a routing helper. Back when we were doing `form_with model: @article`, it would see that the class name of `@article` was `Article`. Then, `form_with` would see if this object had been saved to the database before or not. If the object had not been saved, the form would use `articles_path` -- the plural version of the routing helper. If the object had been saved, it would use `article_path` -- the singular version of routing helper.
+
+The same rule applies here. `form_with`'s underlying code checks to see what `@article` is first. It's an Article that has been saved to the database, so the first part of the routing helper is `article`. Then it checks what `@comment` is. This object is a Comment that has not been saved to the database, so the helper's next component is `comments`. Then we're out of array elements, so `form_with` puts `_path` on the end. This is how we arrive at `article_comments_path`.
+
+This is another one of those excellent Rails conventions you've heard about throughout this guide. And it's one of the more "magical" (or "confusing") aspects of Rails. So don't worry too much if you don't get it first pass.
+
+If we attempt to submit the form again, we'll see that the `create` action is missing in this new controller.
+
+Let's wire up the create in `app/controllers/comments_controller.rb`:
+```ruby
+class CommentsController < ApplicationController
+  def new
+    @article = Article.find(params[:article_id])
+    @comment = @article.comments.build
+  end
+
+  def create
+    article = Article.find(params[:article_id])
+
+    comment = article.comments.build(comment_params)
+
+    comment.save
+    redirect_to article
+  end
+
+  private
+
+  def comment_params
+    params.require(:comment).permit(:commenter, :body)
+  end
+end
+```
+
+In a similar approach from the *new* action, we are finding the `article` from the DB. The code takes advantage of some of the methods available for an association. We use the create method on `article.comments` to create and save the comment. This will automatically link the comment so that it belongs to that particular article, just as we saw earlier when we created a comment in the Rails console.
 
 Once we have made the new comment, we send the user back to the original article using the `redirect_to article_path(article)` helper, or the short magic one `redirect_to article`. As we have already seen, this calls the show action of the `ArticlesController` which in turn renders the `show.html.erb` template.
 
@@ -2238,7 +2335,17 @@ If we fill out the comment form again, we will see our comment appear.
 
 Now you can add articles and comments to your blog and have them show up in the right places.
 
-### Comment - Stay DRY
+### Comment validation
+
+We don't want to have a comment that doesn't have information for the comment commenter and the comment body. For this reason we'll need to put validations in the `Comment` model. We want the presence of the commenter and the body. Let's write that down in the `app/models/comment.rb`:
+```ruby
+class Comment < ApplicationRecord
+  belongs_to :article
+  validates :commenter, :body, presence: true
+end
+```
+
+### Comments - Stay DRY
 
 We used this technic to clean up some code from the article view, and let's use the same technic to clean up the comment view code. In the article show view, we can notice a part of the code, that easily can be extracted to a separate view partial. The rendering of the comments and the rendering of the comment form are the first candidates.
 
@@ -2249,7 +2356,7 @@ We can create this view partial files under the `view/comments` folder. Go on an
     <div class="media-content">
       <div class="content">
         <p>
-          <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) %></small>
+          <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) %> ago </small>
           <br>
           <%= comment.body %>
         </p>
@@ -2269,9 +2376,43 @@ We can create this view partial files under the `view/comments` folder. Go on an
 </div>
 ```
 
-And a `_form.html.erb`:
+Note that we are using partial locals, like `comment` that will be passed as an option from the `render` method.
+Now the `app/views/articles/show.html.erb` will be:
 ```html
-<div class="column is-5 is-offset-4">
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1><%= @article.title %></h1>
+      </div>
+    </div>
+
+    <%= render @article, show: true %>
+
+    <%= render @article.comments %>
+  </div>
+</div>
+```
+
+Next, we can extract the comment form from the *edit* view, into a separate partial file. Let's create `app/views/comments/_form.html.erb` and move the form there. Together with the form we can add the a code, which will present any errors when saving a comment. Very similar like we did for the article form. In `app/views/comments/_form.html.erb`
+```html
+<% if comment.errors.any? %>
+  <div class="column is-6 is-offset-3">
+    <article class="message is-danger">
+      <div class="message-body">
+        <p><%= pluralize(comment.errors.count, "error") %> prohibited this comment from being saved:</p>
+        <br>
+        <p>
+        <% comment.errors.full_messages.each do |msg| %>
+          <li><%= msg %></li>
+        <% end %>
+        </p>
+      </div>
+    </article>
+  </div>
+<% end %>
+
+<div class="column is-6 is-offset-3">
   <article class="media">
     <div class="media-content">
       <%= form_with model: [article, comment], local: true do |form| %>
@@ -2290,7 +2431,10 @@ And a `_form.html.erb`:
           </div>
           <div class="level-right">
             <div class="level-item">
-              <%= form.submit "Comment", class: 'button is-info' %>
+              <%= form.submit "Create", class: 'button is-info' %>
+            </div>
+            <div class="level-item">
+              <%= link_to "Cancel", article_path(article), class: 'button is-light' %>
             </div>
           </div>
         </nav>
@@ -2300,82 +2444,55 @@ And a `_form.html.erb`:
 </div>
 ```
 
-Note that we are using partial locals, like `comment` that will be passed as an option from the `render` method. Also, we did a change in how we construct the `model` in the `form_with`. Instead of directly calling an article object, we can call the article object from the comment object. This is the same object.
-
-Now go back to the `app/views/articles/show.html.erb` and use the `render` method to render the view partials:
-```ruby
+And, in the `app/views/comments/new.html.erb`:
+```html
 <div class="container">
   <div class="columns is-multiline">
     <div class="column is-6 is-offset-3">
       <div class="content is-size-3">
-        <h1><%= @article.title %></h1>
+        <h1>New Article Comment</h1>
       </div>
     </div>
 
-    <%= render @article, show: true %>
+    <%= render 'form', article: @article, comment: @comment %>
 
-    <%= render @comments %>
-
-    <%= render 'comments/form', article: @article, comment: @comment %>
   </div>
 </div>
 ```
 
-Besides the newly created instance variables, nothing new here. We are using `<%= render @comments %>` to render a collection of elements constructed from the `Comment` model. This is the same method used to render a collection of articles from the Article index page.
-
-You can notice two new instance variables in the view: `@comments` and `comment`.
-Those two, are defined in the `ArticlesController` to simplify the view. So let's add them:
+At this stage, if we try to save an invalid comment, the model errors will not be present. The reason for this, comes from the controller, from the `create` action. Curren code for the action:
 ```ruby
-class ArticlesController < ApplicationController
-  def index
-    @articles = Article.all
-  end
+def create
+  article = Article.find(params[:article_id])
 
-  def show
-    @article = Article.find(params[:id])
-    @comments = @article.comments.order(created_id: :desc)
-    @comment = Comment.new
-  end
+  comment = article.comments.build(comment_params)
 
-  # code omitted
+  comment.save
+  redirect_to article
 end
 ```
 
-This is actually an improvement over the previous code. Now the comments are ordered by the date of creation in descending order. Also, we are using `Comment.new` for the `@comment`, instead of the `@article.comments.build`. As it turns out, defining this code inside the controller will add an *empty* element to the `@article.comments` collection, and Rails will try to render an *empty* comment (a comment that is not saved into the DB). On the other hand, we are using this type of object, only to build the create path for the comment. The `article_comments_path` one.
-Remember that, when we want to build a URL path for the creation of any object, we are using the and *empty* object from the Model, to indicate that the object doesn't exist in the DB. This will tell Rails to build an URL path to create a method. Thus, just using `Comment.new` will trick the implementation.
-
-
-### Fontawesome - CSS library
-
-We are using the Fontawesome library to present any icon elements in our views. The usage of this library comes as Bulma suggestion. Most of the Bulma classes for icon elements are using Fontawesome. But in order to use such type of classes, we need to explicitly use the Fontawesome library.
-
-The way we use the library is to make use as a script element with source pointing to a CDN file like: `<script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>`
-
-This is a valid way to import third-party libraries, but we are seeing some issues with it. You may notice that we need to manually refresh some of the pages, where we are using the icon elements, in order to see the icons itself. You can try to view an article that has comments. At first, you may not be able to see the icons for delete and edit. You'll need to refresh the page in order to render it properly. This problem comes off the special fonts which Fontawesome is using. This type of web fonts comes together with the library and needs to be pre-compiled before using it in our views. This is a task for Rails. In addition to this, the path of the font is defined in one of the sass files of the library, and it is hardcoded. Meaning it is not dynamic, and it depends on the naming and location of the font files. The change can be easily done by ourselves, but this applies to support this change across any further versions of this library. We need somehow, to re-apply the change whenever we use a different version of the library. In this case, we can rely on the Ruby/Rails community, find a ruby library that wraps the Fontawesome library, and use it in our project. By using a gem we are no longer have the responsibility to apply custom changes whenever a new version of this library is out. We just need to make `bundle update *gem*` and we are safe.
-
-The [`font-awesome-sass`](https://github.com/FortAwesome/font-awesome-sass) is one of the many gems that wraps the Fontawesome library into a ruby library. We can use this library in our project. In order to do that, we need to follow the gem's instruction and apply the changes:
-In Gemfile before `group :development, :test` block we can add:
+As we can see here, we are missing the standard *if* branching to check if the model is saved successfully into the database or not. Let's change that. We want to render the `new` view file, if the model cannot be saved.
 ```ruby
-# Assets
-gem 'font-awesome-sass', '~> 5.13.0'
+def create
+  @article = Article.find(params[:article_id])
+
+  @comment = @article.comments.build(comment_params)
+
+  if @comment.save
+    redirect_to @article
+  else
+    render :new
+  end
+end
 ```
 
-Then run:
-```
-❯ bundle install
-```
+Looking into the new code, we can notice, that we switch from local variables, to an instance variables for `comment` and `article`. The reason for this, is that we need to render the `new` file if we have any model errors. And the `new` files, uses the `@article` and `@comment` inside the code.
 
-This will update the `Gemfile.lock`.  If the gem is successfully installed, we need to call the Rails asset to use this library.
+Now if we try to save invalid comment, we can see the error:
+![Rails welcome logo](./images/comment_save_errors.png)
 
-Create a new file `fontawesome.scss` under `app/assets/stylesheets` folder and write:
-```css
-@import "font-awesome-sprockets";
-@import "font-awesome";
-```
-
-The last step is to delete the script tag pointing to `https://use.fontawesome.com/releases/v5.3.1/js/all.js` from the `app/views/layouts/application.html.erb`.
-
-That's all. Reload the server, and we are able to view the icons, without any issues.
+---
 
 ## Deleting Comments
 
@@ -2388,7 +2505,7 @@ So first, let's add the delete link in the `app/views/comments/_comment.html.erb
 <% end %>
 ```
 
-Clicking this new "Destroy Comment" link will fire off a DELETE /articles/:article_id/comments/:id to our CommentsController, which can then use this to find the comment we want to delete. Right now, the destroy action that matches that route is missing, and so we will see errors if we attempt to delete a comment.
+Clicking this new "Destroy Comment" link will fire off a `DELETE /articles/:article_id/comments/:id` to our `CommentsController`, which can then use this to find the comment we want to delete. Right now, the destroy action that matches that route is missing, and so we will see errors if we attempt to delete a comment.
 
 So let's add a destroy action to our Comments controller
 ```ruby
@@ -2404,7 +2521,7 @@ The *destroy* action will find the comment we are looking at, by using comment, 
 
 If we attempt to delete a comment again, this time it will disappear.
 
-## Deleting Associated Objects
+### Deleting Associated Objects
 
 If you delete an article, its associated comments will also need to be deleted, otherwise we would see an `ActiveRecord::InvalidForeignKey` error happen.
 
@@ -2424,3 +2541,4 @@ end
 ```
 
 Now when an article is deleted, all of its comments will be deleted too, and we will avoid having a foreign key constraint error happen.
+
