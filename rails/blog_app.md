@@ -2085,12 +2085,12 @@ Now that we can create comments on articles, it would be really useful to displa
 <%= render @article, show: true %>
 
 <% @article.comments.each do |comment| %>
-  <div class="column is-5 is-offset-4">
+  <div class="column is-6 is-offset-3">
     <article class="media">
       <div class="media-content">
         <div class="content">
           <p>
-            <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) ago %></small>
+            <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) %> ago</small>
             <br>
             <%= comment.body %>
           </p>
@@ -2135,11 +2135,11 @@ In `app/views/articles/_article.html.erb` partial file, add this in the button g
   <% end %>
   <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
 
+  <a href="" class="card-footer-item"> New Comment </a>
+
   <%= link_to "Delete", article_path(article), method: :delete,
       data: { confirm: "Are you sure you want to delete this article?" },
       class: "card-footer-item" %>
-
-  <a href="" class="card-footer-item"> New Comment </a>
 </footer>
 ```
 
@@ -2192,12 +2192,31 @@ Go back to `app/views/articles/_article.html.erb` partial file and adjust the li
     <%= link_to "Show", article_path(article), class: "card-footer-item" %>
   <% end %>
   <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+  <%= link_to "New Comment", new_article_comment_path(article), class: "card-footer-item" %>
 
   <%= link_to "Delete", article_path(article), method: :delete,
       data: { confirm: "Are you sure you want to delete this article?" },
       class: "card-footer-item" %>
+</footer>
+```
 
-  <%= link_to "New Comment", new_article_comment_path(article), class: "card-footer-item" %>
+Now we are able to see the link in the article show page, but this link will be present in the index view also. The reason for this, is that this partial file is rendered from the index itself. We want to hide the option to create a new comment directly from the index page, so let's hide that link when we are in the index page. We can use the `local_assigns[:show]` for that reason.
+```html
+<footer class="card-footer">
+  <% if local_assigns[:show] %>
+    <%= link_to "Back", root_path, class: "card-footer-item" %>
+  <% else %>
+    <%= link_to "Show", article_path(article), class: "card-footer-item" %>
+  <% end %>
+  <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+
+  <% if local_assigns[:show] %>
+    <%= link_to "New Comment", new_article_comment_path(article), class: "card-footer-item" %>
+  <% end %>
+
+  <%= link_to "Delete", article_path(article), method: :delete,
+      data: { confirm: "Are you sure you want to delete this article?" },
+      class: "card-footer-item" %>
 </footer>
 ```
 
@@ -2217,7 +2236,7 @@ This creates four files and one empty directory:
 - app/helpers/comments_helper.rb
 - app/assets/stylesheets/comments.scss
 
-If we attempt to submit the form again, we'll see that the `new` action is missing in this new controller. Alongside with the action we'll create the appropriate view file.
+This time, if we try again and click on the "New Comment" link, we'll see that the `new` action is missing in this new controller. Alongside with the controller action, we'll create the appropriate view file.
 In the controller:
 ```ruby
 class CommentsController < ApplicationController
@@ -2228,7 +2247,7 @@ class CommentsController < ApplicationController
 end
 ```
 
-You'll see a bit more complexity here than you did in the controller for articles.
+You'll see a bit more complexity here than we did in the controller for articles.
 
 That's a side-effect of the nesting that you've set up. Each request for a comment has to keep track of the article to which the comment is attached, thus the initial call to the find method of the Article model to get the article in question.
 
@@ -2244,13 +2263,13 @@ article_comments GET    /articles/:article_id/comments(.:format)
 
 The colon before `:article_id` indicates that this part of the URL will be available as `params[:article_id]` in our controller. This is why we're using `:article_id` here, and not `:id`.
 
-And in the new.html.erb file we want to implement the form to create a comment:
+And in the `new.html.erb` file we want to implement the form to create a comment. Create the file, and add this:
 ```html
 <div class="container">
   <div class="columns is-multiline">
     <div class="column is-6 is-offset-3">
       <div class="content is-size-3">
-        <h1>New Article Comment</h1>
+        <h1><%= @article.title %> - New Comment</h1>
       </div>
     </div>
 
@@ -2273,7 +2292,7 @@ And in the new.html.erb file we want to implement the form to create a comment:
               </div>
               <div class="level-right">
                 <div class="level-item">
-                  <%= form.submit "Create", class: 'button is-info' %>
+                  <%= form.submit "Save", class: 'button is-info' %>
                 </div>
                 <div class="level-item">
                   <%= link_to "Cancel", article_path(@article), class: 'button is-light' %>
@@ -2345,13 +2364,225 @@ class Comment < ApplicationRecord
 end
 ```
 
+With the comment validation in place, we can add the html part of the code for the `error` messages when the model we want to create is invalid. In the comment `new.html.erb`
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1><%= @article.title %> - New Comment</h1>
+      </div>
+    </div>
+
+    <% if @comment.errors.any? %>
+      <div class="column is-6 is-offset-3">
+        <article class="message is-danger">
+          <div class="message-body">
+            <p><%= pluralize(@comment.errors.count, "error") %> prohibited this comment from being saved:</p>
+            <br>
+            <p>
+            <% @comment.errors.full_messages.each do |msg| %>
+              <li><%= msg %></li>
+            <% end %>
+            </p>
+          </div>
+        </article>
+      </div>
+    <% end %>
+
+    <div class="column is-6 is-offset-3">
+      <article class="media">
+        <div class="media-content">
+          <%= form_with model: [@article, @comment], local: true do |form| %>
+            <div class="field">
+              <p class="control">
+                <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
+              </p>
+            </div>
+            <div class="field">
+              <p class="control">
+                  <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+              </p>
+            </div>
+            <nav class="level">
+              <div class="level-left">
+              </div>
+              <div class="level-right">
+                <div class="level-item">
+                  <%= form.submit "Save", class: 'button is-info' %>
+                </div>
+                <div class="level-item">
+                  <%= link_to "Cancel", article_path(@article), class: 'button is-light' %>
+                </div>
+              </div>
+            </nav>
+          <% end %>
+        </div>
+      </article>
+    </div>
+  </div>
+</div>
+```
+
+The change in the view, will not work itself. We need to be able to pass a model object to the view, to be able to present any errors. Passing an object to the view can be done from the controller. So let's change the controller, the create action, to render the same form, and to be able to present any errors:
+```ruby
+def create
+  @article = Article.find(params[:article_id])
+  @comment = @article.comments.build(comment_params)
+
+  if @comment.save
+    redirect_to @article
+  else
+    render :new
+  end
+end
+```
+Now if we try to save invalid comment, we can see the error:
+
+![Errors on saving a comment](./images/comment_save_errors.png)
+
+It is a very similar code like the previous one, for the same action, but now we are using instance variable, needed when the model cannot be saved in the DB. The instance variable is needed to render the `new` view from the `create` action.
+
+### Editing a comment
+
+Now that we can create a comment, the next thing is to be able to edit a comment. If we take into consideration how we create an `edit` and `new` views/actions for articles, it is almost the same we need to develop for the `new` and `edit` comment views/actions.
+
+The `new` comment view is done, and the `edit` comment part is the same as the `new` view. But before we create the view, we need to make an anchor link for the `edit` action. We'll be developing with the usual cycle. Make a *GET* request to render the comment form, and after that, make a *PATCH* request to update the comment. The same way as it is for updating an article.
+Let's open and edit `_article.html.erb` partial file:
+```html
+...code omitted...
+<%= render @article, show: true %>
+
+<% @article.comments.each do |comment| %>
+  <div class="column is-6 is-offset-3">
+    <article class="media">
+      <div class="media-content">
+        <div class="content">
+          <p>
+            <strong><%= comment.commenter %></strong> <small><%= time_ago_in_words(comment.created_at) %> ago </small>
+            <br>
+            <%= comment.body %>
+          </p>
+        </div>
+        <nav class="level is-mobile">
+          <div class="level-left">
+            <%= link_to edit_article_comment_path(comment.article, comment), class: "level-item" do %>
+              <span class="icon is-small"><i class="fas fa-edit"></i></span>
+            <% end %>
+            <a class="level-item">
+              <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+            </a>
+          </div>
+        </nav>
+      </div>
+    </article>
+  </div>
+<% end %>
+```
+
+We are using `edit_article_comment_path` which is defined in the routes. When constructing a URL path, we always rely on the route file. Writing `rails routes` will present our options for every path. We need to look for a path where we can render the edit view. This edit view should contain the comment form.
+
+By looking into the routes output in the terminal, on the *URI Pattern*, we can notice: `/articles/:article_id/comments/:id/edit(.:format)`
+
+This should tell us, that in the `params` object, from the controller, we can have access to the `article_id` and `id` variables. Those are the primary key values for an article and the associated comment.
+
+If we try to follow the edit link, we can see the usual error which tells that the action is not created in the controller. So let's make this work. In the `app/controllers/comments_controller.rb` add the `edit` action:
+```ruby
+# code omitted
+def edit
+  @comment = Comment.find(params[:id])
+  @article = @comment.article
+end
+# code omitted
+```
+
+And if we try again to follow the edit link, we can see the usual error that indicates that the view file is missing. In our case, the file is `edit.html.erb`. This file is very similar like the `new.html.erb` file:
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1>Edit <%= @article.title %>'s comment</h1>
+      </div>
+    </div>
+
+    <% if @comment.errors.any? %>
+      <div class="column is-6 is-offset-3">
+        <article class="message is-danger">
+          <div class="message-body">
+            <p><%= pluralize(@comment.errors.count, "error") %> prohibited this comment from being saved:</p>
+            <br>
+            <p>
+            <% @comment.errors.full_messages.each do |msg| %>
+              <li><%= msg %></li>
+            <% end %>
+            </p>
+          </div>
+        </article>
+      </div>
+    <% end %>
+
+    <div class="column is-6 is-offset-3">
+      <article class="media">
+        <div class="media-content">
+          <%= form_with model: [@article, @comment], local: true do |form| %>
+            <div class="field">
+              <p class="control">
+                <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
+              </p>
+            </div>
+            <div class="field">
+              <p class="control">
+                  <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+              </p>
+            </div>
+            <nav class="level">
+              <div class="level-left">
+              </div>
+              <div class="level-right">
+                <div class="level-item">
+                  <%= form.submit "Update", class: 'button is-info' %>
+                </div>
+                <div class="level-item">
+                  <%= link_to "Cancel", article_path(@article), class: 'button is-light' %>
+                </div>
+              </div>
+            </nav>
+          <% end %>
+        </div>
+      </article>
+    </div>
+  </div>
+</div>
+```
+
+We can see that the only difference is the heading title and the name of the submit button.
+
+Now that the `@comment` comes from the DB (we are using `Comment.find` from the model), it means it is saved, the form action path will be different one compared to the form action for a new comment.
+
+At this moment if we try to make an update, we'll se the usual error, that the `update` action is missing in the `CommentsController`. Let's change that:
+```ruby
+def update
+  @comment = Comment.find(params[:id])
+  @article = @comment.article
+
+  if @comment.update(comment_params)
+    redirect_to @article
+  else
+    render :edit
+  end
+end
+```
+
+In this action, we find the `@comment` and its association, the `@article`, and then, we are trying to update the `@comment`. If the update is successful, we are making redirect the article show page, otherwise, we are rendering the `edit` view once more. This time the model errors will be present above the comment form.
+
 ### Comments - Stay DRY
 
 We used this technic to clean up some code from the article view, and let's use the same technic to clean up the comment view code. In the article show view, we can notice a part of the code, that easily can be extracted to a separate view partial. The rendering of the comments and the rendering of the comment form are the first candidates.
 
 We can create this view partial files under the `view/comments` folder. Go on and create a partial called `_comment.html.erb`:
 ```html
-<div class="column is-5 is-offset-4">
+<div class="column is-6 is-offset-3">
   <article class="media">
     <div class="media-content">
       <div class="content">
@@ -2363,9 +2594,9 @@ We can create this view partial files under the `view/comments` folder. Go on an
       </div>
       <nav class="level is-mobile">
         <div class="level-left">
-          <a class="level-item">
+          <%= link_to edit_article_comment_path(comment.article, comment), class: "level-item" do %>
             <span class="icon is-small"><i class="fas fa-edit"></i></span>
-          </a>
+          <% end %>
           <a class="level-item">
             <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
           </a>
@@ -2394,103 +2625,153 @@ Now the `app/views/articles/show.html.erb` will be:
 </div>
 ```
 
-Next, we can extract the comment form from the *edit* view, into a separate partial file. Let's create `app/views/comments/_form.html.erb` and move the form there. Together with the form we can add the a code, which will present any errors when saving a comment. Very similar like we did for the article form. In `app/views/comments/_form.html.erb`
-```html
-<% if comment.errors.any? %>
-  <div class="column is-6 is-offset-3">
-    <article class="message is-danger">
-      <div class="message-body">
-        <p><%= pluralize(comment.errors.count, "error") %> prohibited this comment from being saved:</p>
-        <br>
-        <p>
-        <% comment.errors.full_messages.each do |msg| %>
-          <li><%= msg %></li>
-        <% end %>
-        </p>
-      </div>
-    </article>
-  </div>
-<% end %>
+---
 
-<div class="column is-6 is-offset-3">
-  <article class="media">
-    <div class="media-content">
-      <%= form_with model: [article, comment], local: true do |form| %>
-        <div class="field">
-          <p class="control">
-            <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
-          </p>
-        </div>
-        <div class="field">
-          <p class="control">
-              <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
-          </p>
-        </div>
-        <nav class="level">
-          <div class="level-left">
-          </div>
-          <div class="level-right">
-            <div class="level-item">
-              <%= form.submit "Create", class: 'button is-info' %>
-            </div>
-            <div class="level-item">
-              <%= link_to "Cancel", article_path(article), class: 'button is-light' %>
-            </div>
-          </div>
-        </nav>
-      <% end %>
-    </div>
-  </article>
-</div>
-```
+Let's move on and try to put `new.html.erb` and `edit.html.erb` view files side by side we can notice that those file are almost identical. This is a great place to make a common partial file for those views.
 
-And, in the `app/views/comments/new.html.erb`:
+The first approach is to take any code from the view file and put into a new partial file, called `_form.html.erb`. So let's copy the code from the `new.html.erb`:
 ```html
 <div class="container">
   <div class="columns is-multiline">
     <div class="column is-6 is-offset-3">
       <div class="content is-size-3">
-        <h1>New Article Comment</h1>
+        <h1><%= @article.title %> - New Comment</h1>
       </div>
     </div>
 
-    <%= render 'form', article: @article, comment: @comment %>
+    <% if @comment.errors.any? %>
+      <div class="column is-6 is-offset-3">
+        <article class="message is-danger">
+          <div class="message-body">
+            <p><%= pluralize(@comment.errors.count, "error") %> prohibited this comment from being saved:</p>
+            <br>
+            <p>
+            <% @comment.errors.full_messages.each do |msg| %>
+              <li><%= msg %></li>
+            <% end %>
+            </p>
+          </div>
+        </article>
+      </div>
+    <% end %>
 
+    <div class="column is-6 is-offset-3">
+      <article class="media">
+        <div class="media-content">
+          <%= form_with model: [@article, @comment], local: true do |form| %>
+            <div class="field">
+              <p class="control">
+                <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
+              </p>
+            </div>
+            <div class="field">
+              <p class="control">
+                  <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+              </p>
+            </div>
+            <nav class="level">
+              <div class="level-left">
+              </div>
+              <div class="level-right">
+                <div class="level-item">
+                  <%= form.submit "Save", class: 'button is-info' %>
+                </div>
+                <div class="level-item">
+                  <%= link_to "Cancel", article_path(@article), class: 'button is-light' %>
+                </div>
+              </div>
+            </nav>
+          <% end %>
+        </div>
+      </article>
+    </div>
   </div>
 </div>
 ```
 
-At this stage, if we try to save an invalid comment, the model errors will not be present. The reason for this, comes from the controller, from the `create` action. Curren code for the action:
-```ruby
-def create
-  article = Article.find(params[:article_id])
-
-  comment = article.comments.build(comment_params)
-
-  comment.save
-  redirect_to article
-end
+And change `new.html.erb` to:
+```html
+<%= render 'form' %>
 ```
 
-As we can see here, we are missing the standard *if* branching to check if the model is saved successfully into the database or not. Let's change that. We want to render the `new` view file, if the model cannot be saved.
-```ruby
-def create
-  @article = Article.find(params[:article_id])
+Next, we'll extract all of the instance variables in the partial file into a local variables, together with the heading of the view, and the name of the submit button. Those two names are different iin the view files.
+The partial view file `_form.html.erb`:
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1><%= heading %></h1>
+      </div>
+    </div>
 
-  @comment = @article.comments.build(comment_params)
+    <% if comment.errors.any? %>
+      <div class="column is-6 is-offset-3">
+        <article class="message is-danger">
+          <div class="message-body">
+            <p><%= pluralize(comment.errors.count, "error") %> prohibited this comment from being saved:</p>
+            <br>
+            <p>
+            <% comment.errors.full_messages.each do |msg| %>
+              <li><%= msg %></li>
+            <% end %>
+            </p>
+          </div>
+        </article>
+      </div>
+    <% end %>
 
-  if @comment.save
-    redirect_to @article
-  else
-    render :new
-  end
-end
+    <div class="column is-6 is-offset-3">
+      <article class="media">
+        <div class="media-content">
+          <%= form_with model: [article, comment], local: true do |form| %>
+            <div class="field">
+              <p class="control">
+                <%= form.text_field :commenter, class: "input", placeholder: 'Commenter' %>
+              </p>
+            </div>
+            <div class="field">
+              <p class="control">
+                  <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+              </p>
+            </div>
+            <nav class="level">
+              <div class="level-left">
+              </div>
+              <div class="level-right">
+                <div class="level-item">
+                  <%= form.submit "Save", class: 'button is-info' %>
+                </div>
+                <div class="level-item">
+                  <%= link_to "Cancel", article_path(article), class: 'button is-light' %>
+                </div>
+              </div>
+            </nav>
+          <% end %>
+        </div>
+      </article>
+    </div>
+  </div>
+</div>
 ```
 
-Looking into the new code, we can notice, that we switch from local variables, to an instance variables for `comment` and `article`. The reason for this, is that we need to render the `new` file if we have any model errors. And the `new` files, uses the `@article` and `@comment` inside the code.
+Back to `new.html.erb` file to adjust the changes:
+```html
+<%= render 'form',
+  article: @article,
+  comment: @comment,
+  heading: "#{@article.title} - New Comment",
+  submit: "Save" %>
+```
 
-Now if we try to save invalid comment, we can see the error:
-![Rails welcome logo](./images/comment_save_errors.png)
+The last think to change is the `edit.html.erb` file to render the partial file and pass the appropriate values for all four local partial variables:
+```html
+<%= render 'form',
+  article: @article,
+  comment: @comment,
+  heading: "Edit #{@article.title}'s comment",
+  submit: "Update" %>
+```
 
 ---
 
@@ -2500,9 +2781,16 @@ Another important feature of a blog is being able to delete spam comments. To do
 
 So first, let's add the delete link in the `app/views/comments/_comment.html.erb` partial. Replace the anchor element for the deletion:
 ```html
-<%= link_to article_comment_path(comment.article, comment), method: :delete , class: "level-item", data: { confirm: "Are you sure you want to delete this comment?" } do %>
-  <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
-<% end %>
+<nav class="level is-mobile">
+  <div class="level-left">
+    <%= link_to edit_article_comment_path(comment.article, comment), class: "level-item" do %>
+      <span class="icon is-small"><i class="fas fa-edit"></i></span>
+    <% end %>
+    <%= link_to article_comment_path(comment.article, comment), method: :delete , class: "level-item", data: { confirm: "Are you sure you want to delete this comment?" } do %>
+      <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+    <% end %>
+  </div>
+</nav>
 ```
 
 Clicking this new "Destroy Comment" link will fire off a `DELETE /articles/:article_id/comments/:id` to our `CommentsController`, which can then use this to find the comment we want to delete. Right now, the destroy action that matches that route is missing, and so we will see errors if we attempt to delete a comment.
