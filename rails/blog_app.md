@@ -2830,3 +2830,137 @@ end
 
 Now when an article is deleted, all of its comments will be deleted too, and we will avoid having a foreign key constraint error happen.
 
+# Modeling users
+
+In the previous sections, we ended with the creation of two MVC implementation, for *Article* and *Comment*.  Next is to build a similar component called *User*.  We'll create the usual MVC structure of this component, and besides, in this section, we’ll take the first critical to give users the ability to sign up for our site and create a user profile page. Once users can sign up, we’ll let them log in and log out as well. As a bonus section, we might as well, learn how to protect pages from improper access, add account activations (thereby confirming a valid email address) and password resets. Taken together, the material in this section develops a full Rails login and authentication system.
+
+As you may know, there are various pre-built authentication solutions for Rails. In particular, the Devise gem has emerged as a robust solution for a wide variety of uses and represents a strong choice for professional-grade applications. But this might be a huge mistake, for a beginner, to start and use such a robust system out of the box. With complicated data models used by such systems would be utterly overwhelming for beginners (or even for experienced developers not familiar with data modeling). For learning purposes, it’s essential to introduce the subject more gradually. Happily, Rails makes it possible to take such a gradual approach while still developing an industrial-strength login and authentication system suitable for production applications. This way, even if you do end up using a third-party system, later on, you’ll be in a much better position to understand and modify it to meet your particular needs.
+
+## User model
+
+We are going to use the `rails` command-line tool to generate the *User* model. At first, we'll need a *name* and *email* columns/attributes that are of type *string*. Open a terminal, and from the root location of the *blog* type, write:
+```
+❯ rails generate model User name:string email:string
+```
+
+By passing the optional parameters `name:string` and `email:string`, we tell Rails about the two attributes we want, along with which types those attributes should be (in this case, *string*)
+
+The model generator creates a migration file. Migrations provide a way to alter the structure of the database incrementally, so that our data model can adapt to changing requirements. In the case of the *User* model, the migration is created automatically by the model generation script - it creates a *users* table with two columns, *name* and *email*.
+
+---
+
+*Note about the migration file name:* the migration file is prefixed by a *timestamp* based on when the migration was generated. In the early days of migrations, the filenames were prefixed with incrementing integers, which caused conflicts for collaborating teams if multiple programmers had migrations with the same number. Barring the improbable scenario of migrations generated the same second, using timestamps conveniently avoids such collisions.
+
+---
+
+## User validations
+
+Thw *name* and *email* attributes for the User model are completely generic: any string (including an empty one) is currently valid in either case. And yet, names and email addresses are more specific than this. For example, name should be non-blank, and email should match the specific format characteristic of email addresses. Moreover, since we’ll be using email addresses as unique usernames when users log in, we shouldn’t allow email duplicates in the database.
+
+In short, we should enforce using validation on name and email, and shouldn't allow being any sting, or to be empty values.
+
+We can start with the validation of the presence of these attributes. We’ll ensure that both the name and email fields are present before a user gets saved to the database.
+
+Open the `app/models/user.rb` file and add the validations:
+```ruby
+class User < ApplicationRecord
+  validates :name, presence: true
+  validates :email, presence: true
+end
+```
+
+The next type of validation we can use is the length of the name and email. With this validation, we can pick a maximum length for both user's name and user's email. For the user's name, we can pick 50 out of thin air as a reasonable upper bound, which means verifying that name of 51 characters is too long. And for the user's email, we can pick a maximum of 255 characters. Let's add this validator in our model:
+```ruby
+class User < ApplicationRecord
+  validates :name, presence: true, length: { maximum: 255 }
+  validates :email, presence: true, length: { maximum: 50 }
+end
+```
+
+Our validations for the name attribute enforce only minimal constraints. Any non-blank name under 51 characters will do. But of course, the email attribute must satisfy the more stringent requirement of being a valid email address. So far we’ve only rejected blank email addresses. Now, we’ll require email addresses to conform to the familiar pattern `user@example.com`.
+
+The code for email format validation uses the `format` validation, which works like this:
+```ruby
+validates :email, format: { with: /<regular expression>/ }
+```
+
+This validates the attribute with the given *regular expression* (or *regex*), which is a powerful (and often cryptic) language for matching patterns in strings. This means we need to construct a regular expression to match valid email addresses while not matching invalid ones.
+Regex is out fo the scope, therefore we'll try to find one that is already defined in the web: `/\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i`
+
+---
+
+Note: To really understand regular expressions I suggest using an interactive regular expression matcher like [Rubular](https://rubular.com/) and the ruby regex [docs](https://ruby-doc.org/core-2.6.5/Regexp.html)
+
+---
+
+Let's open once more the model, and apply this type of validation:
+```ruby
+class User < ApplicationRecord
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i
+
+  validates :name, presence: true, length: { maximum: 255 }
+  validates :email, presence: true, length: { maximum: 50 },
+                    format: { with: VALID_EMAIL_REGEX }
+end
+```
+
+Here the regex `VALID_EMAIL_REGEX` is a constant, indicated in Ruby by a name starting with a capital letter. The code ensures that only email addresses that match the pattern will be considered valid
+
+
+To enforce the uniqueness of email addresses (so that we can use them as usernames), we’ll be using the `uniqueness` option to the `validates` method. But be warned: there’s a major caveat. There’s just one small problem, which is that the Active Record uniqueness validation does not guarantee uniqueness at the database level. In many rare cases, we might have two unique email values in the DB. Somehow skipping the validation. It is not a Rails bug, it is more begginers' mistakes in the code design.
+
+Luckily, the solution is straightforward to implement: we just need to enforce uniqueness at the database level as well as at the model level. Our method is to create a database index on the email column, and then require that the index be unique.
+
+---
+
+When creating a column in a database, it is important to consider whether we will need to find records by that column. Consider, for example, the email attribute. When we allow users to log in to the sample app, we will need to find the user record corresponding to the submitted email address. Unfortunately, based on the naïve data model, the only way to find a user by email address is to look through each user row in the database and compare its email attribute to the given email—which means we might have to examine every row (since the user could be the last one in the database). This is known in the database business as a full-table scan, and for a real site with thousands of users, it is a *Bad Thing*.
+
+Putting an index on the email column fixes the problem. To understand a database index, it’s helpful to consider the analogy of a book index. In a book, to find all the occurrences of a given string, say “foobar”, you would have to scan each page for “foobar”—the paper version of a full-table scan. With a book index, on the other hand, you can just look up "foobar" in the index to see all the pages containing "foobar". A database index works essentially the same way.
+
+---
+
+The email index represents an update to our data modeling requirements, which is handled in Rails using migrations. At this stage, where the model automatically created a new migration, we need to create a migration directly by using the `migration` generator:
+```ruby
+❯ rails generate migration add_index_to_users_email
+```
+Unlike the migration for users, the email uniqueness migration is not predefined, so we need to fill in its contents:
+```ruby
+class AddIndexToUsersEmail < ActiveRecord::Migration[6.0]
+ def change
+  add_index :users, :email, unique: true
+ end
+end
+```
+
+This uses a Rails method called `add_index` to add an index on the email column of the user's table. The index by itself doesn’t enforce uniqueness, but the option `unique: true` does.
+
+The final step is to migrate the database:
+```
+❯ rails db:migrate
+```
+
+Before putting the validation in the model, let's treat emails to be case insensitive. We want `FOO@bar.com` to be the same as `foo@bar.com`.
+To avoid this incompatibility, we’ll standardize on all lowercase addresses, converting `FOO@bar.com` to foo@bar.com`. The way to do this is with a *callback*, which is a method that gets invoked at a particular point in the lifecycle of an Active Record object.
+
+In the present case, that point is before the object is saved, so we’ll use a `before_save` callback to downcase the email attribute before saving the user. This is the final result for the uniqueness validation:
+```ruby
+class User < ApplicationRecord
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i
+
+  before_save :email_to_downcase
+
+  validates :name, presence: true, length: { maximum: 255 }
+  validates :email, presence: true, length: { maximum: 50 },
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: true
+
+  private
+
+  def email_to_downcase
+    self.email = email.downcase
+  end
+end
+```
+
+The `before_save` callback sets the user’s email address to a lowercase version of its current value using the downcase string method. Note the usage of `self`. The `self` refers to the current object, and the expression on the right site is the 'new' value we want to use. In this case, is the email value to be used for the current object. This code will not work: `self.email = self.email.downcase`. And `self` is not optional in an assignment. Thus this code will not work: `email = email.downcase`.
+
