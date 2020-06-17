@@ -2964,3 +2964,222 @@ end
 
 The `before_save` callback sets the user’s email address to a lowercase version of its current value using the downcase string method. Note the usage of `self`. The `self` refers to the current object, and the expression on the right site is the 'new' value we want to use. In this case, is the email value to be used for the current object. This code will not work: `self.email = self.email.downcase`. And `self` is not optional in an assignment. Thus this code will not work: `email = email.downcase`.
 
+## Adding a secure password
+
+Now that we've defined the user validations for *email* and *name*, we are ready to add the last of the basic User's attribute: secure password. The idea is to require each user to have a password (with a password confirmation) upon the user creation, and then store a *hashed* version of the password. Please note that *hash* in this context, doesn't refer to the hash ruby object. Instead, ir refers to special irreversible [hash function](https://en.wikipedia.org/wiki/Hash_function) to input data.
+
+We'll also use a method to *authenticate* a user based on a given password. The method for authenticate a user will be to take a submitted password, hash it, and compare the result to the hashed value stored in the database. If the two match, the submitted password is correct and the user is authenticated.
+By comparing hashed values instead of raw passwords, we will be able to authenticate users without storing the passwords themselves. This means that, even if our database is compromised, our users’ passwords will still be secure.
+
+___
+
+Most of the logic will be implemented by using a single line of method in Rails: `has_secure_password`. This method we'll include in the User model. This method gives us the following:
+- The ability to save a securely hashed `password_digest` attribute to the database
+- A pair of virtual attributes19 (`password` and `password_confirmation`), including presence validations upon object creation and a validation requiring that they match
+- An `authenticate` method that returns the user when the password is correct (and false otherwise)
+
+
+The only requirement for has_secure_password to work its magic is for the corresponding model to have an attribute called `password_digest`.
+
+To implement the data model, we first generate a migration file. We can name it `add_password_digest_to_users`:
+```
+❯ rails generate migration add_password_digest_to_users
+```
+
+In the newly generated migration file we tell to Rails, that we want a new column. Column with name `password_digest` of type `string`:
+```ruby
+class AddPasswordDigestToUsers < ActiveRecord::Migration[6.0]
+  def change
+    add_column :users, :password_digest, :string
+  end
+end
+```
+
+To apply it, we just migrate the database:
+```
+❯ rails db:migrate
+```
+
+To make the password digest, `has_secure_password` uses the gem called `bcrypt`, which is responsible to make the hash function. This gem is defined in the Gemfile, but inside of comment. We just need to uncomment, and run `bundle install`.
+
+After the installation we can open the User model and add the `has_secure_password` method. Together with this, we can add additional validation. We want to enforce the length of the password to be greater then six character, and also, not to be blank.
+```ruby
+class User < ApplicationRecord
+  # code omitted
+
+  has_secure_password
+
+  before_save :email_to_downcase
+
+  validates :name, presence: true, length: { maximum: 255 }
+  validates :email, presence: true, length: { maximum: 50 },
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: true
+  validates :password, presence: true, length: { minimum: 6 }
+
+  # code omitted
+end
+```
+
+At this stage we can open the console and play with the implementation:
+```bash
+❯ rails console
+Running via Spring preloader in process 74402
+Loading development environment (Rails 6.0.3.1)
+[1] pry(main)> user = User.create name: 'John White', email: 'john@white.com', password: 'foobar', password_confirmation: 'foobar'
+=> #<User:0x00007f850f74d628 id: 10, name: "John White", email: "john@white.com", created_at: Tue, 16 Jun 2020 09:15:30 UTC +00:00, updated_at: Tue, 16 Jun 2020 09:15:30 UTC +00:00, password_digest: [FILTERED]>
+[2] pry(main)> user.password_digest
+=> "$2a$10$wb3eXmEB11DruRg6sHtEYe3y0.rOHd4QP7NayRfTYR98D1kEQvOwS"
+[3] pry(main)> user.authenticate('not the right password')
+=> false
+[4] pry(main)> user.authenticate('foobar')
+=> #<User:0x00007f850f74d628 id: 10, name: "John White", email: "john@white.com", created_at: Tue, 16 Jun 2020 09:15:30 UTC +00:00, updated_at: Tue, 16 Jun 2020 09:15:30 UTC +00:00, password_digest: [FILTERED]>
+[5] pry(main)>
+```
+
+From the code above, we can notice that the value in the user `password_digest` is some form of a hash value. This value will be different in your local testing. Also, if we notice the usage of the `authenticate` method, if we are trying to authenticate with invalid password, the method will return false. And otherwise, if the input password, matches the initial password, in that case, the user instance is return.
+
+## User sign up
+
+In this section, we'll go through the creation of the Users controller with actions for *new*, *create* and *show*. At this stage, we are going to use the `users` resource as an independent. Meaning, we aren't going to use it with the other resources, like the articles resource. That can be another task. Most of the code in this section is the code we can see in the other two controllers/views. So I am going to write the code straight forward and explain the new staff afterward.
+
+Using the Rails generator to create the controller:
+```
+❯ rails generate controller UsersController
+```
+
+In routes:
+```ruby
+get 'users/signup', to: 'users#new'
+resources :users, except: :new
+```
+
+In the controller:
+```ruby
+class UsersController < ApplicationController
+  def new
+    @user = User.new
+  end
+
+  def create
+    @user = User.new(user_params)
+
+    if @user.save
+      redirect_to @user
+    else
+      render :new
+    end
+  end
+
+  def show
+    @user = User.find(params[:id])
+  end
+
+  private
+
+  def user_params
+    params.require(:user).permit(:name,:email,:password,:password_confirmation)
+  end
+end
+```
+
+And the views:
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h1>New User</h1>
+      </div>
+    </div>
+
+    <% if @user.errors.any? %>
+      <div class="column is-6 is-offset-3">
+        <article class="message is-danger">
+          <div class="message-body">
+            <p><%= pluralize(@user.errors.count, "error") %> prohibited this user from being saved:</p>
+            <br>
+            <p>
+            <% @user.errors.full_messages.each do |msg| %>
+              <li><%= msg %></li>
+            <% end %>
+            </p>
+          </div>
+        </article>
+      </div>
+    <% end %>
+
+    <div class="column is-6 is-offset-3">
+      <%= form_with model: @user, local: true do |form| %>
+        <div class="field">
+          <%= form.label :name, class: "label" %>
+          <div class="control">
+            <%= form.text_field :name, class: "input", placeholder: "Your name"%>
+          </div>
+        </div>
+
+        <div class="field">
+          <%= form.label :email, class: "label" %>
+
+          <div class="control">
+            <%= form.email_field :email, class: "input", placeholder: 'Your email' %>
+          </div>
+        </div>
+
+        <div class="field">
+          <%= form.label :password, class: "label" %>
+
+          <div class="control">
+            <%= form.password_field :password, class: "input", placeholder: 'Your password' %>
+          </div>
+        </div>
+
+        <div class="field">
+          <%= form.label :password_confirmation, class: "label" %>
+
+          <div class="control">
+            <%= form.password_field :password_confirmation, class: "input", placeholder: 'Confirm password' %>
+          </div>
+        </div>
+
+
+        <div class="field is-grouped">
+          <div class="control">
+            <%= form.submit "Submit", class: "button is-link" %>
+          </div>
+          <div class="control">
+            <%= link_to "Cancel", articles_path, class: 'button is-link is-light' %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
+```
+
+```html
+<div class="container">
+  <div class="columns is-multiline">
+    <div class="column is-6 is-offset-3">
+      <div class="content is-size-3">
+        <h3><%= @user.name %></h3>
+        <p><%= @user.email %></p>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+We have a couple of new things here. First, in the view for the *new* action, we can see a new type of form fields: `password_field` and `email_field`. Like `text_field` and `text_area`, those fields are dedicated fields when we want to use an input for email and password respectively.
+
+Next, we have a new variant of the `resources` in the routes. We can use options like `except` and `only`, to narrow the default routes from one resource. In our code, we narrow down the user resources, to allow all the default routes, except the *new* route. We want this route to be `users/signup` and to point on the same action in the controller. That is why we create a custom route: `get 'users/signup', to: 'users#new'`. If we open the terminal and inspect the routes by `rails routes -c users`, we should see:
+```
+users_signup GET    /users/signup(.:format)   users#new
+       users GET    /users(.:format)          users#index
+             POST   /users(.:format)          users#create
+   edit_user GET    /users/:id/edit(.:format) users#edit
+        user GET    /users/:id(.:format)      users#show
+             PATCH  /users/:id(.:format)      users#update
+             PUT    /users/:id(.:format)      users#update
+             DELETE /users/:id(.:format)      users#destroy
+```
