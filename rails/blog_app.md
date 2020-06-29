@@ -89,7 +89,7 @@ Controllers are classes that group together common methods for handling a partic
 
 To create a new controller, you will need to run the "controller" generator and tell it you want a controller called "articles" with an action called "index", just like this:
 ```
-❯ bin/rails generate controller articles index
+❯ rails generate controller articles index
 ```
 
 Rails will create several files and a route for you.
@@ -3228,7 +3228,7 @@ Let's continue and build the login form. Recall, that using the `form_with` help
   <div class="columns is-multiline">
     <div class="column is-6 is-offset-3">
       <div class="content is-size-3">
-        <h1>Sign in</h1>
+        <h1>Log in</h1>
       </div>
     </div>
 
@@ -3578,3 +3578,368 @@ end
 ```
 
 Note that in this method, we are using `and return` after the `redirect_to` method. The reason is that we want to early return from the method because `redirect_to` doesn't apply that the action (method) will early return.
+
+## User-Articles association
+
+Now that we have a User model and an Article model, we can make a relation between those two. The type of the relation should be the same as the Article-Comment relation. Meaning one user can have many articles and one article belongs to a user.
+
+Let's start with the generation of the migration file.
+```
+❯ rails generate migration AddUserToArticles
+```
+
+This will create a migration file. Open the created file and add the method to tell Rails that we want to have a new reference:
+```ruby
+class AddUserToArticles < ActiveRecord::Migration[6.0]
+ def change
+ add_reference :articles, :user, foreign_key: true
+ end
+end
+```
+
+When we are pleased with the result of the migration file, we can apply the effects into the database:
+```
+rails db:migrate
+```
+
+Next on the list, is to add the relation types into the models as well. So in `user.rb`:
+```ruby
+# code omitted
+has_many :articles, dependent: :destroy
+# code omitted
+```
+
+And in `article.rb`:
+```
+belongs_to :user
+```
+
+With the usage of the `foreign_key: true` in the migration file, we added a database constrain. This type if constrain doesn't allow to have an article record with no user associated.
+
+We need to update the code in some of the controllers, to accommodate the constrain. Alongside the database constrain, we want to have application constraints that do a couple of things. First, not allowing to create an article if no user is logged in. Second, not allowing for a user to edit or delete an article that doesn't belong to the user. And at last, we want to hide, or show, some of the buttons, for creating, editing and deleting an article
+
+The user, in our case, will be the user that is logged in, or the `current_user` in our application domain.
+
+Let's go and add additional helper methods in the `SessionsHelper` module. We want our `logged_in_notice` to be more robust, to accept the dynamic flash message and flash type. With the change of the method signature, we'll change the name as well:
+```ruby
+  def session_notice(type, message)
+    flash[type] = message
+    redirect_to root_path and return
+  end
+```
+
+In addition to this change, we'll create a new method that will compare the current user object with a user object that is in relation to an article. This will help to find if the current user can change or delete an article that doesn't belong to the user.
+```ruby
+  def equal_with_current_user?(other_user)
+    current_user == other_user
+  end
+```
+
+With these methods in place, we can change the controller actions and corresponding view files.
+
+In the `_nav_bar` partial file, we want the *New Article* button to be present only when a user is logged in:
+```html
+...
+code omitted
+...
+    <div id="navbarBasicExample" class="navbar-menu">
+      <div class="navbar-end">
+        <div class="navbar-item">
+          <div class="buttons">
+            <% if logged_in? %>
+              <%= link_to "New Article", new_article_path, class: "button is-primary has-text-weight-bold" %>
+              <%= link_to "Log Out", logout_path, method: :delete, class: "button is-primary has-text-weight-bold" %>
+            <% else %>
+              <%= link_to "Log In", login_path, class: "button is-primary has-text-weight-bold" %>
+              <%= link_to "Sign Up", users_signup_path, class: "button is-primary has-text-weight-bold" %>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+```
+
+In the `_article` partial file we want to *hide* the *edit* and the *delete* buttons:
+```html
+      <% if logged_in? && equal_with_current_user?(article.user) %>
+        <%= link_to "Edit", edit_article_path(article), class: "card-footer-item" %>
+      <% end %>
+
+      <% if local_assigns[:show] %>
+        <%= link_to "New Comment", new_article_comment_path(article), class: "card-footer-item" %>
+      <% end %>
+
+      <% if logged_in? && equal_with_current_user?(article.user) %>
+        <%= link_to "Delete", article_path(article), method: :delete,
+            data: { confirm: "Are you sure you want to delete this article?" },
+            class: "card-footer-item" %>
+      <% end %>
+```
+
+---
+
+Next, we want to apply changes to the controller action. First, in the `UsersController` we want to change the old method `logged_in_notice` to the new one in the *new* action:
+```ruby
+def new
+  session_notice(:warning, 'Already logged in!') if logged_in?
+
+  @user = User.new
+end
+```
+
+The same change should be done in the `SessionsController`, for the *new* action:
+```ruby
+def new
+  session_notice('warning', 'Already logged in!') if logged_in?
+end
+```
+
+And in the `ArticlesController` class, we'll start with the *new* action:
+```ruby
+def new
+  session_notice(:danger, 'You must be logged in!') unless logged_in?
+
+  @article = Article.new
+end
+```
+
+In the *create* action, we are adding the user-articles relation:
+```ruby
+def create
+  @article = Article.new(article_params)
+  @article.user = current_user
+
+  if @article.save
+    redirect_to @article
+  else
+    render :new
+  end
+end
+```
+
+In *edit* action:
+```ruby
+def edit
+  session_notice(:danger, 'You must be logged in!') unless logged_in?
+
+  @article = Article.find(params[:id])
+
+  if logged_in?
+    session_notice(:danger, 'Wrong User') unless equal_with_current_user?(@article.user)
+  end
+end
+```
+
+And changes in the *destroy* action:
+```ruby
+def destroy
+  session_notice(:danger, 'You must be logged in!') unless logged_in?
+
+  article = Article.find(params[:id])
+
+  if equal_with_current_user?(article.user)
+    article.destroy
+    redirect_to articles_path
+  else
+    session_notice(:danger, 'Wrong User')
+  end
+end
+```
+
+You may find some weird `if/unless` statements in the *edit* and *destroy* actions. This is because Rails doesn't allow to have two `redirect_to` or `render` methods in one action:
+> Render and/or redirect were called multiple times in this action. Please note that you may only call render OR redirect, and at most once per action. Also note that neither redirect nor render terminate execution of the action, so if you want to exit an action after redirecting, you need to do something like “redirect_to(…) and return”.
+
+With the `if/unless` branching, we can *hide* one method definition and bypass the potential error.
+
+If you think that this type of code looks wired and doesn't follow some OOP practices, you are right. This is known as `code smell`. Usually in such code, hidden bugs can occur in the future. Luckily, we will go through writing Rails spec (tests), and then, we'll try to refactor this part of the code with confidence.
+
+## User-Comments association
+
+If we recall and check the implementation for the `Comment` model, we can notice, that we have a `commenter` attribute. This is a simple string attribute to define and persist the name of the comment commenter.
+
+This becomes obsolete, as now, we have that information from the current user. For this reason, we'll create a migration file to drop the `commenter` column from the database:
+```
+❯ rails generate migration RemoveCommenterFromComments
+```
+
+Open the file, and use the `remove_column` to tell Rails to drop the column.
+```ruby
+class RemoveCommenterFromComments < ActiveRecord::Migration[6.0]
+  def change
+    remove_column(:comments, :commenter)
+  end
+end
+```
+
+The removal of the column, forces as to make a changes in the view file, but we'll constrain for a moment, and apply the changes afterward.
+
+---
+
+The association implementation should be the same as the User-Articles association.
+
+We start with the generation of the migration file:
+❯ rails generate migration AddUserToCommentsRelation
+```
+```
+
+Open the newly created migration file, and use the `add_reference` method to build the relation at a database level:
+```ruby
+class AddUserToCommentsRelation < ActiveRecord::Migration[6.0]
+  def change
+    add_reference :comments, :user, foreign_key: true
+  end
+end
+```
+
+Running the migration:
+```
+❯ rails db:migrate
+```
+
+In the `User` model:
+```ruby
+has_many :comments, dependent: :destroy
+```
+
+In the `Comment` model:
+```ruby
+class Comment < ApplicationRecord
+  belongs_to :article
+  belongs_to :user
+
+  validates :body, presence: true
+end
+```
+
+Next are the view changes. We'll start with the `comment/_form` partial file. Here, we want to remove the input field `commenter`:
+```html
+<div class="column is-6 is-offset-3">
+  <article class="media">
+    <div class="media-content">
+      <%= form_with model: [article, comment], local: true do |form| %>
+        <div class="field">
+          <p class="control">
+              <%= form.text_area :body, class: "textarea", placeholder: "Add a comment..." %>
+          </p>
+        </div>
+        <nav class="level">
+          <div class="level-left">
+          </div>
+          <div class="level-right">
+            <div class="level-item">
+              <%= form.submit "Save", class: 'button is-info' %>
+            </div>
+            <div class="level-item">
+              <%= link_to "Cancel", article_path(article), class: 'button is-light' %>
+            </div>
+          </div>
+        </nav>
+      <% end %>
+    </div>
+  </article>
+</div>
+```
+
+In the `comments/_comment` partial file:
+```html
+<div class="column is-6 is-offset-3">
+  <article class="media">
+    <div class="media-content">
+      <div class="content">
+        <p>
+          <strong><%= comment.user.name %></strong> <small><%= time_ago_in_words(comment.created_at) %> ago </small>
+          <br>
+          <%= comment.body %>
+        </p>
+      </div>
+      <nav class="level is-mobile">
+        <% if equal_with_current_user?(comment.user) %>
+          <div class="level-left">
+            <%= link_to edit_article_comment_path(comment.article, comment), class: "level-item" do %>
+              <span class="icon is-small"><i class="fas fa-edit"></i></span>
+            <% end %>
+            <%= link_to article_comment_path(comment.article, comment), method: :delete , class: "level-item", data: { confirm: "Are you sure you want to delete this comment?" } do %>
+              <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+            <% end %>
+          </div>
+        <% end %>
+      </nav>
+    </div>
+  </article>
+</div>
+```
+
+And in `articles/_article` partial view file, we want to *hide* the "New Comment" button for any non sign in users:
+```html
+<% if local_assigns[:show] && logged_in? %>
+  <%= link_to "New Comment", new_article_comment_path(article), class: "card-footer-item" %>
+<% end %>
+```
+
+---
+
+Before applying a change in the controllers, we want to extend the `session_notice` method to pass an additional, optional, argument for the redirect path:
+```ruby
+def session_notice(type, message, path = root_path)
+  flash[type.to_sym] = message
+  redirect_to path and return
+end
+```
+
+And at last change is in the `CommentsController` changes. In the *new* action:
+```ruby
+def new
+  session_notice(:danger, 'You must be logged in!', login_path) unless logged_in?
+
+  @article = Article.find(params[:article_id])
+  @comment = @article.comments.build
+end
+```
+
+In the *create* action:
+```ruby
+def create
+  @article = Article.find(params[:article_id])
+  @comment = @article.comments.build(comment_params)
+  @comment.user = current_user
+
+  if @comment.save
+    redirect_to @article
+  else
+    render :new
+  end
+end
+```
+
+In the *edit* action:
+```ruby
+def edit
+  session_notice(:danger, 'You must be logged in!', login_path) unless logged_in?
+
+  @comment = Comment.find(params[:id])
+
+  if logged_in?
+    session_notice(:danger, 'Wrong User') unless equal_with_current_user?(@comment.user)
+  end
+
+  @article = @comment.article
+end
+```
+
+In the *destroy* action:
+```ruby
+def destroy
+  session_notice(:danger, 'You must be logged in!', login_path) unless logged_in?
+
+  comment = Comment.find(params[:id])
+
+  if equal_with_current_user?(comment.user)
+    comment.destroy
+    redirect_to comment.article
+  else
+    session_notice(:danger, 'Wrong User')
+  end
+end
+```
+
+We can notice that the implementation is pretty much the same as it is for the user-articles association.
