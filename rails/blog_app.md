@@ -3943,3 +3943,344 @@ end
 ```
 
 We can notice that the implementation is pretty much the same as it is for the user-articles association.
+
+## Testing
+
+The various test types we are about to look at can fall along in two basic categories. At one end are **unit** tests. These test individual components in isolation, proving that they implement the expected behavior independent of the surrounding system. Because of this, unit tests are usually small and fast.
+
+In the real world, these components have to interact with each other. One component may expect a collaborator to have a particular interface when in fact it has completely different one. Even though all the tests pass, the software as a whole is broken.
+
+This is where **integration** tests come in. These tests exercise the system as a whole rather than its individual components. They typically do so by simulating a user trying to accomplish a task in our software. Instead of being concerned with invoking methods or calling out to collaborators, integration tests are all about clicking and typing as a user.
+
+Although this is quite effective for proving that we have working software, it comes at a cost. Integration tests tend to be much slower and more brittle than their unit counterparts.
+
+### Testing Rails apps
+
+If we go and list the `test/` directory we can notice couple of sub directories.
+```
+❯ ls -F test/
+
+channels/
+controllers/
+fixtures/
+helpers/
+integration/
+mailers/
+models/
+system/
+test_helper.rb
+```
+
+This is the default Rails structure for testing.
+
+The *helpers*, *mailers*, and *models* directories are meant to hold tests for view helpers, mailers, and models, respectively. The *channels* directory is meant to hold tests for Action Cable connection and channels. The *controllers* directory is meant to hold tests for controllers, routes, and views. The *integration* directory is meant to hold tests for interactions between controllers.
+
+The *system* test directory holds system tests, which are used for full browser testing of your application. System tests allow you to test your application the way your users experience it and help you test your JavaScript as well. System tests inherit from Capybara and perform in browser tests for your application.
+
+*Fixtures* are a way of organizing test data; they reside in the fixtures directory.
+
+A *jobs* directory will also be created when an associated test is first generated.
+
+The `test_helper.rb` file holds the default configuration for your tests.
+
+The `application_system_test_case.rb` holds the default configuration for your system tests.
+
+
+When we use a rails generator to build a model or controller, we got test files as well. Those ones were generated using `minitest` gem.
+
+What we will do next is to use the `RSpec` gem to write our tests, called specs.
+
+### RSpec and Rails
+
+The `rspec-rails` ruby library brings the RSpec testing framework to Ruby on Rails as a drop-in alternative to its default testing framework, Minitest.
+
+RSpec Rails defines ten different types of specs for testing different parts of a typical Rails application, that most of it, are the same as in the typical minitest structure.
+
+The main different types provided by RSpec are `Feature spec` and `Request spec`. The `Feature spec` is the same as the system test, and were created before the introduction of the system tests by Rails. They, both, use the same *Cabybara* gem, which provides end-to-end testing. Now that the system tests are supported by Rails, RSpec team encourage us to use them.
+
+Follow is the detail explanation from RSpec.
+
+---
+
+### System specs, feature specs, request specs–what’s the difference?
+
+RSpec Rails provides some end-to-end (entire application) testing capability
+to specify the interaction with the client.
+
+#### System specs
+
+Also called **acceptance tests**, **browser tests**, or **end-to-end tests**,
+system specs test the application from the perspective of a _human client._
+The test code walks through a user’s browser interactions,
+
+* `visit '/login'`
+* `fill_in 'Name', with: 'jdoe'`
+
+and the expectations revolve around page content.
+
+* `expect(page).to have_text('Welcome')`
+
+Because system specs are a wrapper around Rails’ built-in `SystemTestCase`,
+they’re only available on Rails 5.1+.
+(Feature specs serve the same purpose, but without this dependency.)
+
+#### Feature specs
+
+Before Rails introduced system testing facilities,
+feature specs were the only spec type for end-to-end testing.
+While the RSpec team now [officially recommends system specs][] instead,
+feature specs are still fully supported, look basically identical,
+and work on older versions of Rails.
+
+On the other hand, feature specs require non-trivial configuration
+to get some important features working,
+like JavaScript testing or making sure each test runs with a fresh DB state.
+With system specs, this configuration is provided out-of-the-box.
+
+Like system specs, feature specs require the [Capybara][] gem.
+Rails 5.1+ includes it by default as part of system tests,
+but if you don’t have the luxury of upgrading,
+be sure to add it to the `:test` group of your `Gemfile` first:
+
+```ruby
+group :test do
+  gem "capybara"
+end
+```
+
+[officially recommends system specs]: https://rspec.info/blog/2017/10/rspec-3-7-has-been-released/#rails-actiondispatchsystemtest-integration-system-specs
+[Capybara]: https://github.com/teamcapybara/capybara
+
+#### Request specs
+
+Request specs are for testing the application
+from the perspective of a _machine client._
+They begin with an HTTP request and end with the HTTP response,
+so they’re faster than feature specs,
+but do not examine your app’s UI or JavaScript.
+
+Request specs provide a high-level alternative to controller specs.
+In fact, as of RSpec 3.5, both the Rails and RSpec teams
+[discourage directly testing controllers][]
+in favor of functional tests like request specs.
+
+When writing them, try to answer the question,
+“For a given HTTP request (verb + path + parameters),
+what HTTP response should the application return?”
+
+[discourage directly testing controllers]: https://rspec.info/blog/2016/07/rspec-3-5-has-been-released/#rails-support-for-rails-5
+
+---
+
+## Installing RSpec
+
+First, if we going to RSpec, we can delete the Minitest folder: `test/`. The deletion is safe, as we don't have any tests written.
+
+Next, we need to follow the RSpec installation [guides](https://github.com/rspec/rspec-rails#installation) from the official documentation. We need to put the gem in the `:development` and `:test` group. Follow by `bundle install`.  After that, we need to issue the: `rails generate rspec:install` command to generate the boilerplate files. Those files are `rails_helper.rb` and `spec_helper.rb` under the `spec/` directory. There is also a `.rspec` file at the root of the project. This file is to define any custom RSpec option when running the specs. One useful option is `--format documentation` to have a documentation like output of the running specs.
+
+### FactoryBot gem
+
+Before testing, we'll need a fixture replacement. Recall that fixtures where special type of data, to create a Model object when testing.
+
+`FactoryBot` comes handy here, as replacement of fixture. It has plenty of useful futures for creating a factories. So let's install that library as well. Looking at the [documentations](https://github.com/thoughtbot/factory_bot/blob/master/GETTING_STARTED.md#setup), we need to add `gem 'factory_bot_rails'` in our `Gemfile`, and run `bundle install`. After this, we need to tell RSpec that we want to use this library when writing the specs. For this reason, we usually create an additional directory inside the `spec`, called `support`. In this directory we'll add new ruby file called `factory_bot.rb`:
+```ruby
+RSpec.configure do |config|
+  config.include FactoryBot::Syntax::Methods
+end
+```
+
+After the creation of the file, we need to require it into the `spec/rails_helper.rb` right after the `require 'rspec/rails'` line of code:
+```ruby
+# code omitted
+require 'rspec/rails'
+# Add additional requires below this line. Rails is not loaded until this point!
+require 'support/factory_bot'
+```
+
+### Shoulda Matchers gem
+
+And the last gem we'll use in our spec is the [Shoulda Matchers](https://github.com/thoughtbot/shoulda-matchers). This gem provides simple one-liner tests for common Rails functionality. For example when we want to test model validations, model relations, common controller methods, and so on.
+
+Let's follow the installation instruction and add this gem into our project.
+
+Add the `gem 'shoulda-matchers', '~> 4.0'` into the `Gemfile`, in the `:test` group. Run `bundle install`.
+Create new support file called `shoulda_matchers.rb` under `spec/support/` directory:
+```ruby
+Shoulda::Matchers.configure do |config|
+  config.integrate do |with|
+    with.test_framework :rspec
+    with.library :rails
+  end
+end
+```
+
+Heads up: In all of the examples on how to use this library, you'll notice that it uses the `should` form of RSpec's one-liner syntax over `is_expected.to`. Let's agree to use `is_expected.to` in all of our specs.
+
+## User Model spec
+
+We are going to start with the User model. I'm going to present all the spec file, and explain per `describe` block.
+
+First, let's use the `rspec` generator to create the model spec: `rails generate rspec:model user`. This will create `spec/models/user_spec.rb` file.
+
+Before writing any spec, we'll create the user factory as well. Let's create a directory under `spec`, called `factories`, and add `user.rb` file:
+```ruby
+FactoryBot.define do
+  factory :user do
+    sequence(:email) { |n| "testing#{n}@test.com" }
+    name { 'John' }
+    password { '123456' }
+    password_confirmation { '123456' }
+  end
+end
+```
+
+The idea with the factories, is to have a bare minimum of a working factory. Working means, to have all the required attributes for the model. We are using `sequence` for the `email` attribute, as this attribute has unique constrain. And every instance creation from this model, we'll need to have a unique email address.
+
+We'll make the same for the comment and for the article factories. In `spec/factories/articles.rb`:
+```ruby
+FactoryBot.define do
+  factory :article do
+    user
+
+    title { 'Learning Rails' }
+  end
+end
+```
+
+And in `spec/factories/comments.rb`:
+```ruby
+FactoryBot.define do
+  factory :comment do
+    user
+    article
+
+    body { 'Some comment!!' }
+  end
+end
+```
+
+---
+
+Here are the all specs:
+```ruby
+require 'rails_helper'
+
+RSpec.describe User do
+  context "when saving" do
+    it "transform email to lower case" do
+      john = create(:user, email: 'TESTING@TEST.COM')
+
+      expect(john.email).to eq 'testing@test.com'
+    end
+  end
+
+  describe 'associations' do
+    it { is_expected.to have_many(:articles) }
+    it { is_expected.to have_many(:comments) }
+
+    describe 'dependency' do
+      let(:articles_count) { 1 }
+      let(:comments_count) { 1 }
+      let(:user) { create(:user) }
+
+      it 'destroys comments' do
+        create_list(:comment, comments_count, user: user)
+
+        expect { user.destroy }.to change { Comment.count }.by(-comments_count)
+      end
+
+      it 'destroys articles' do
+        create_list(:article, articles_count, user: user)
+
+        expect { user.destroy }.to change { Article.count }.by(-articles_count)
+      end
+    end
+  end
+
+  describe 'validations' do
+    it { is_expected.to validate_presence_of(:name) }
+    it { is_expected.to validate_presence_of(:email) }
+    it { is_expected.to validate_presence_of(:password) }
+
+    it { is_expected.to have_secure_password }
+
+    context 'when matching uniqueness of email' do
+      subject { create(:user) }
+
+      it { is_expected.to validate_uniqueness_of(:email) }
+    end
+
+    it { is_expected.to validate_length_of(:password).is_at_least(User::MINIMUM_PASSWORD_LENGTH) }
+    it { is_expected.to validate_length_of(:name).is_at_most(User::MAXIMUM_NAME_LENGTH) }
+    it { is_expected.to validate_length_of(:email).is_at_most(User::MAXIMUM_EMAIL_LENGTH) }
+
+    context 'when using invalid email format' do
+      it 'is invalid' do
+        john = build(:user, email: 'test@invalid')
+
+        expect(john.valid?).to be false
+      end
+    end
+  end
+end
+```
+
+First, we are removing the `, :type => :model` code, as RSpec is set to inherit the type of the spec form the directory.
+
+In the first example block (context), we want to write a spec to test the behavior of transforming the email to downcase. Recall, that in the model, we have `before_save` block to make a downcase of the email before saving it to the DB. In this spec we are using the factory to create a new user with intentionally setting the email in upper case, and expecting to be a lower case in the expected block.
+
+In the second example group, called 'associations', we want to have a couple of specs to test the association behavior. In this section, the shoulda matchers come into action. It provides simple matchers called `have_many` to test the Rails `has_many` associations. In the same example group, we have a dedicated example group to test the `dependent: :destroy` option for the associations. We are using the `create(:user)` and `create_list` method from the factory, to create a user, and a list of articles, and comments. In the list factories, we are overwriting the user attribute to match the user in the example group. In the expect block, we are using the `to change` mather, to compare the change of the Comment records, or Article records, by calling the `Model#count` class method.
+
+And in the last example group, called 'validation', for almost all of the spec, we are using the shoulda matchers. We have `validate_presence_of` to test the `validates :name, presence: true`. Next we have `have_secure_password` to validate that we are using the `has_secure_password` method in the model. The `validate_uniqueness_of` is to test the `validates :email, uniqueness: true`. Note that there is a caveat in the matcher. We need to have an explicit `subject` to be able to test the uniqueness. This is explain in the library [example](https://github.com/thoughtbot/shoulda-matchers/blob/master/lib/shoulda/matchers/active_record/validate_uniqueness_of_matcher.rb#L26). The `validate_length_of` in a combination with `is_at_least` and `is_at_most`, will test the `validates :name, length: { ... }` validation.
+
+Note that here, in the `User` model, we are doing small refactoring. We are using constants like `MAXIMUM_NAME_LENGTH` to be able to have a consistent value in our model and the specs. If we make a change in the model, we need only to change the value of the constant. The other code, with the specs, stay the same.
+
+The last part in the validation group, is to test the behavior of the email format. We are suing the similar approach like we test for the email to lowercase behavior. For this test, we don't need to have a factory creating in our DB, so we can use the `build` method.
+
+## Article & Comment Model Spec
+
+Now that we have a specs for the User model, the specs for the Article model and the Comment model, are very trivial:
+
+`spec/models/article_spec.rb`:
+```ruby
+require 'rails_helper'
+
+RSpec.describe Article do
+  describe 'associations' do
+    it { is_expected.to have_many(:comments) }
+    it { is_expected.to belong_to(:user) }
+
+    describe 'dependency' do
+      let(:comments_count) { 1 }
+      let(:article) { create(:article) }
+
+      it 'destroys comments' do
+        create_list(:comment, comments_count, article: article)
+
+        expect { article.destroy }.to change { Comment.count }.by(-comments_count)
+      end
+    end
+  end
+
+  describe 'validations' do
+    it { is_expected.to validate_presence_of(:title) }
+    it { is_expected.to validate_length_of(:title).is_at_least(Article::MINIMUM_TITLE_LENGTH) }
+  end
+end
+```
+
+`spec/models/comment_spec.rb`:
+```ruby
+require 'rails_helper'
+
+RSpec.describe Comment do
+  describe 'associations' do
+    it { is_expected.to belong_to(:user) }
+    it { is_expected.to belong_to(:article) }
+  end
+
+  describe 'validations' do
+    it { is_expected.to validate_presence_of(:body) }
+  end
+end
+```
