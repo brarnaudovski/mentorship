@@ -4284,3 +4284,458 @@ RSpec.describe Comment do
   end
 end
 ```
+
+## System specs
+
+With the model (unit) specs in place, we can continue with the end-to-end testing, using the system specs. System tests are baked into the Rails 6 version, so all the configs to run such specs, is done by Rails. All we need to do, with Rspec, is to create a system spec file, or run the rpsec generator to generate a system spec:
+```
+❯ rails generate rspec:system home_page
+```
+
+This will create `spec/system/home_pages_spec.rb` file with starting code. In this code we can notice:
+```ruby
+RSpec.describe "HomePages" do
+  before do
+    driven_by :rack_test
+  end
+end
+```
+
+The `before do` block, runs before every spec. It will run all the code inside the block before each specs. And the `driven_by` method, tells that all the specs, will run against `:rack_test` client (browser).
+
+Technically, a system test doesn’t have to interact with an actual browser. They can be configured to use the `rack_test` backend, which simulates HTTP requests and parses the resulting HTML. While `rack_test`-based system tests run faster and more reliably than frontend tests using a real browser, they are significantly limited in their ability to simulate a real user’s experience, because they can’t run JavaScript.
+
+But using the default Rails setup for system tests, we can use a driver such as `selenium`, which provides an actual browser to run the specs against it. If we want to use this type of driver we can add:
+```ruby
+driven_by :selenium, using: :chrome
+```
+
+Please note that to use the `:chrome` option, you need to have Chrome installed in your local machine. The `using` option, can be `:firefox`, `:edge`, `:safari`.
+
+As we may know, all the system specs, relay on the Capybara gem. So let's add some common methods used when we'll write a system spec.
+
+### Capybara cheat-sheet
+
+Navigation:
+```ruby
+visit article_path
+```
+
+Interacting with forms:
+```ruby
+fill_in 'First Name', with: 'John'
+---
+check 'A checkbox'
+uncheck 'A checkbox'
+---
+choose 'A radio button'
+---
+select 'Option', from: 'Select box'
+unselect
+```
+
+Clicking links and buttons:
+```ruby
+click_link('id-of-link')
+click_link('Link Text')
+click_button('Save')
+click_on('Link Text') # clicks on either links or buttons
+click_on('Button Value')
+```
+
+Limiting (Scoping):
+```ruby
+within '.class-name' do
+  click '...'
+end
+---
+within_fieldset :id do
+  ...
+end
+```
+
+Querying:
+```ruby
+# Predicate
+page.has_css?('.button')
+expect(page).to have_css('.button')
+page.should have_css('.button')
+
+# Selectors
+expect(page).to have_button('Save')
+expect(page).to have_button('#submit')
+expect(page).to have_content('foo
+```
+
+RSpec Matchers:
+```ruby
+expect(page).to \
+  have_selector '.blank-state'
+  have_selector 'h1#hola', text: 'Welcome'
+  have_button 'Save'
+  have_checked_field '#field'
+  have_unchecked_field
+  have_css '.class'
+  have_field '#field'
+  have_table '#table'
+  ---
+  have_link 'Logout', href: logout_path
+  ---
+  have_select 'Language',
+    selected: 'German'
+    options: ['Engish', 'German']
+    with_options: ['Engish', 'German'] # partial match
+  ---
+  have_text 'Hello',
+    type: :visible # or :all
+    # alias: have_content
+```
+
+### Our first system spec
+
+Now that we have the system spec `spec/system/home_pages_spec.rb`, we can write our first system specification. We'll specify our system spec, when visiting the home page
+```ruby
+require 'rails_helper'
+
+RSpec.describe "HomePages" do
+  before do
+    driven_by :rack_test
+  end
+
+  it 'shows the home link'
+
+  context 'when no user is signed in' do
+    it 'shows the Log In link'
+
+    it 'shows the Sign Up link'
+  end
+
+  context 'when a user is signed in into the app' do
+    it 'shows the New Article link'
+
+    it 'shows the Log Out link'
+  end
+
+  context 'when an article is present' do
+    it 'shows the article title'
+
+    it 'shows the article body'
+
+    it 'shows the link to the article'
+  end
+end
+```
+
+For the `it 'shows the home link'` specification, we need to first visit the root path, and expect to have a link named `My Blog`:
+```ruby
+it 'shows the home link' do
+  visit root_path
+  expecting = page.has_link?('My Blog')
+
+  expect(expecting).to be true
+end
+```
+
+We can write the same using RSpec magic:
+```ruby
+it 'shows the home link' do
+  visit root_path
+
+  expect(page).to have_link?('My Blog)
+end
+```
+
+The `page.has_link?` method, when using in the `expect` context, it translates to `have_link?`. This magic applies for every `page.has_` Capybara predicate.
+
+The `visit root_path` instruction will be used across all the spec, so we can put this statement into the `before do` block, and remove from our first spec.
+```ruby
+RSpec.describe "HomePages" do
+  before do
+    driven_by :rack_test
+
+    visit root_path
+  end
+
+  it 'shows the home link' do
+    expecting = page.has_link?('My Blog')
+
+    expect(expecting).to be true
+  end
+end
+```
+
+Let's move on to the next spec.
+
+```ruby
+context 'when no user is signed in' do
+  it 'shows the Log In link' do
+    expecting = page.has_link?('Log In')
+
+    expect(expecting).to be true
+  end
+
+  it 'shows the Sign Up link' do
+    expecting = page.has_link?('Sign Up')
+
+    expect(expecting).to be true
+  end
+end
+```
+
+Nothing new here. We change only the expecting statement.
+
+Let's now see how we can write the spec when the user is signed in.
+```ruby
+context 'when a user is signed in into the app' do
+  before do
+    user = create(:user)
+
+    visit login_path
+
+    within('form') do
+      fill_in "Email", with: user.email
+      fill_in "Password", with: user.password
+
+      click_on 'Log In'
+    end
+
+    visit root_path
+  end
+
+  it 'shows the New Article link' do
+    expecting = page.has_link?('New Article')
+
+    expect(expecting).to be true
+  end
+
+  it 'shows the Log Out link' do
+    expecting = page.has_link?('Log Out')
+
+    expect(expecting).to be true
+  end
+end
+```
+
+Comparing this with the previous `context` block, we have more steps to write. This is due to the fact, that we need to: have a user in our DB; log in the user in our Blog app; Additionally, we are using `within('form')` to tell Capybara to look for an input element within the `form` element. After, we are using the same steps to write the expectations. You can also notice that in RSpec, we can have a `before do` blog inside the nested `context` or `describe` block.
+
+Last think scenario we can write is when an article is present in our Blog app:
+
+```ruby
+context 'when an article is present' do
+  let!(:article) { create(:article, title: 'Testing with RSpec', body: 'Testing article body') }
+
+  before do
+    visit root_path
+  end
+
+  it 'shows the article title' do
+    expecting = page.has_content?(article.title)
+
+    expect(expecting).to be true
+  end
+
+  it 'shows the article body' do
+    expecting = page.has_content?(article.body)
+
+    expect(expecting).to be true
+  end
+
+  it 'shows the link to the article' do
+    expecting = page.has_link?('Show')
+
+    expect(expecting).to be true
+  end
+end
+```
+
+By using `let!` we make sure that we have the factory `:article` created write after the initialization. Without using the bang(`!`), the factory will be created only when we are calling it. In our case, only when we are calling `article` in our specs.
+
+### Article system specs
+
+Let's run the rspec generator to create a new system spec and write our first specs for creating an article
+```
+❯ rails generate rspec:system articles_integration
+```
+
+```ruby
+require 'rails_helper'
+
+RSpec.describe "ArticlesInteraction" do
+  let(:user) { create(:user) }
+  let(:article) { create(:article, user: user) }
+
+  before do
+    driven_by :rack_test
+
+    visit login_path
+
+    within('form') do
+      fill_in "Email", with: user.email
+      fill_in "Password", with: user.password
+
+      click_on 'Log In'
+    end
+  end
+
+  describe 'Creating an article' do
+    it 'creates and shows the newly created article' do
+      title = 'Create new system spec'
+      body = 'This is the body'
+
+      click_on('New Article')
+
+      within('form') do
+        fill_in "Title", with: title
+        fill_in "Body", with: body
+
+        click_on 'Save Article'
+      end
+
+      expect(page).to have_content(title)
+      expect(page).to have_content(body)
+    end
+  end
+```
+
+In our initial setup for this system spec, we need to have an article in our DB. This article should have a dedicated user relation/object, with which we can test on. That is why we use `create(:article, user: user)`. We can see the usage of the factory `user` in our next examples.
+
+What we can see in the `before` block, is the same code we used when we want to log in as a particular user (for the `HomePages` system specs). As developers, we want not to repeat ourselves, writing the same code in multiple files. This technic is called DRY. Do not repeat yourself. We want those lines of code to be in one place (method) and call it from multiple locations.
+
+The method would be:
+```ruby
+def log_in(user)
+  visit login_path
+
+  within('form') do
+    fill_in "Email", with: user.email
+    fill_in "Password", with: user.password
+
+    click_on 'Log In'
+  end
+end
+```
+
+Let's make a research and find where we can put this method, and use it across any RSpec example. If we go through the RSpec [documentation](https://relishapp.com/rspec/rspec-core/v/3-9/docs/helper-methods/define-helper-methods-in-a-module), the implementation would be:
+
+Create a new module and save it under the `spec/support/` directory. Filename `user_helper.rb`:
+```ruby
+module UserHelper
+  def log_in(user)
+    visit login_path
+
+    within('form') do
+      fill_in "Email", with: user.email
+      fill_in "Password", with: user.password
+
+      click_on 'Log In'
+    end
+  end
+end
+```
+
+Open the `spec/rails_helper.rb` and in the require section add:
+```ruby
+require 'support/user_helper'
+```
+
+Now we can change the specs to make a call to this method:
+```ruby
+RSpec.describe "ArticlesInteraction" do
+  let(:user) { create(:user) }
+  let(:article) { create(:article, user: user) }
+
+  before do
+    driven_by :rack_test
+
+    log_in(user)
+  end
+
+  # code omitted
+```
+
+And in `home_pages_spec.rb`
+```ruby
+context 'when user is sign in into the app' do
+  before do
+    log_in(create(:user))
+
+    visit root_path
+  end
+
+  # code omitted
+```
+
+---
+
+The next spec is for editing and deleting an article:
+```ruby
+describe 'Editing an article' do
+  it 'edits and shows the article' do
+    title = 'New Title'
+    body = 'New Body'
+
+    visit article_path(article)
+
+    click_on 'Edit'
+
+    within('form') do
+      fill_in "Title", with: title
+      fill_in "Body", with: body
+
+      click_on 'Update Article'
+    end
+
+    expect(page).to have_content(title)
+    expect(page).to have_content(body)
+  end
+end
+
+describe 'Deleting an article' do
+  it 'deletes the article and redirect to index view' do
+    visit article_path(article)
+
+    # Only if using selenium driver.
+    # accept_alert do
+    #   click_on 'Delete'
+    # end
+
+    # If using rack_test driver
+    click_on 'Delete'
+
+    expect(page).to have_content('Articles')
+  end
+end
+```
+
+And at last for creating a new article and using the back action from and Article show page
+```ruby
+describe 'Creating new article comments' do
+  it 'creates an article comment' do
+    new_comment = 'New comment'
+
+    visit article_path(article)
+
+    click_on 'New Comment'
+
+    within('form') do
+      fill_in 'comment_body', with: new_comment
+
+      click_on 'Save'
+    end
+
+    expect(page).to have_content(new_comment)
+  end
+end
+
+describe 'Going back to the article index page' do
+  it 'goes back to the article index page' do
+    visit article_path(article)
+
+    click_on 'Back'
+
+    expect(page).to have_content('Articles')
+  end
+end
+```
+
+In our last example, we don't introduce new methods. It should be easy and clear how can we use system specs
