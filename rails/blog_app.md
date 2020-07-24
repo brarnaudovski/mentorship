@@ -4739,3 +4739,77 @@ end
 ```
 
 In our last example, we don't introduce new methods. It should be easy and clear how can we use system specs
+
+## Writing Request specs
+
+Recall that Request specs are for testing the application from the perspective of a _machine client._ They begin with an HTTP request and end with the HTTP response, so they’re faster than feature specs, but do not examine your app’s UI or JavaScript.\
+
+Let's write out first request spec
+
+### Users request specs
+
+Go on and use the rspec generator to create a new request spec:
+```
+❯ rails generate rspec:request users
+```
+
+This will create a `spec/requests/users_spec.rb` file.
+
+Let's modify the file and write our first request spec:
+```ruby
+require 'rails_helper'
+
+RSpec.describe 'Users' do
+  it "creates a User and redirects to the User's page" do
+    get '/users/signup'
+
+    post_params = {
+      params: {
+        user: {
+          name: 'New User',
+          email: 'foo@bar.com',
+          password: 'testtest',
+          password_confirmation: 'testtest'
+        }
+      }
+    }
+
+    post '/users', post_params
+
+    expect(session[:user_id]).not_to be_nil
+
+    follow_redirect!
+
+    expect(response.body).to include('New User')
+    expect(response.body).to include('foo@bar.com')
+  end
+
+  it 'renders New when User params are empty' do
+    get '/users/signup'
+
+    post_params = {
+      params: {
+        user: {
+          name: '',
+          email: '',
+          password: '',
+          password_confirmation: ''
+        }
+      }
+    }
+
+    post '/users', post_params
+
+    expect(session[:user_id]).to be_nil
+    expect(response.body).to include('New User')
+  end
+end
+```
+
+As we can notice, we are using methods like `get`, `post`, that somehow simulates the work of the _machine client._ At first, the behavior testing is similar like we did with System spec, but this type of specs are more faster. And not just that, we can write tests for edge cases. We can see that in our next Articles examples.
+
+One important note is on `follow_redirect!`. In every place in our Controllers, where we use `redirect_to`, we must use this function, to tell the spec, to follow the redirect, and continue with the rest of the instructions.
+
+For the methods like `get`, `post`, and all other HTTP verbs, we can put either a string that represents the resource path, or we can use the Rails `_path` methods. Like `root_path` for the `/` resource.
+
+Other thing we can notice from our first request spec, is that we have access to the `session` and `flash` objects. We can write any expect block around that objects in our spec files.
