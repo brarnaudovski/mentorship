@@ -5224,3 +5224,30 @@ def destroy
 end
 ```
 
+### Article Comments request specs
+
+Because in our UI design, we put the article's comments into the Article show page, we can create a separate request spec file to test that particular scenario:
+```
+❯ rails generate rspec:request articles_comments
+Running via Spring preloader in process 77975
+      create  spec/requests/articles_comments_spec.rb
+```
+
+Let's open the file, modify the boilerplate code and write the specs:
+```ruby
+require 'rails_helper'
+
+RSpec.describe 'Articles Comments' do
+  describe 'GET articles comments' do
+    let(:expected_comment_body) { 'Comment Body' }
+    let(:comment) { create(:comment, body: expected_comment_body) }
+
+    it 'shows the article comments' do
+      get article_path(comment.article)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include expected_comment_body
+    end
+  end
+end
+```
