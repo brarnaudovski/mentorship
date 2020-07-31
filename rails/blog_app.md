@@ -5251,3 +5251,419 @@ RSpec.describe 'Articles Comments' do
   end
 end
 ```
+
+### Comments request specs
+
+In this last part of the request spec, we'll write specs for the comments. Editing an article comment, Creating an article comment, and destroying a comment. For every spec, we'll have a context when a user is logged-in, and a context when no user is logged-in.
+
+First, let's create the request file:
+```
+❯ rails generate rspec:request comments
+Running via Spring preloader in process 79198
+      create  spec/requests/comments_spec.rb
+```
+
+We can start by writing the desired specifications:
+```ruby
+require 'rails_helper'
+
+RSpec.describe 'Comments' do
+  describe 'Edit article comments' do
+    context 'when no user is logged in' do
+      it 'redirect back to login path'
+      it 'redirect back to login path using the Patch HTTP verb'
+    end
+
+    context 'when a user is logged in' do
+      it 'cannot edit different user comments'
+      it 'is able to edit a comment'
+    end
+  end
+
+  describe 'Creating an article comment' do
+    context 'when no user is logged in' do
+      it 'redirect back when creating new comment'
+    end
+
+    context 'when a user is sign in' do
+      it 'can create a comment'
+    end
+  end
+
+  describe 'Deleting an article comment' do
+    context 'when no user is logged in' do
+      it 'redirect back when deleting a comment'
+    end
+
+    context 'when a user is sign in' do
+      it 'can delete its own article comment'
+      it 'cannot delete different user comment on a different user article'
+
+      it 'can delete different user comments on its own article'
+    end
+  end
+end
+```
+
+Before starting to write any spec, for all the specs, we need to have basic factories for comment and article. Later on, in the specific specs, we can `overwrite` any of the factories, by re-defining them. Usually when we want to declare an article's user.
+
+Let's update the first describe block and start with the first context: when no user is logged in:
+```ruby
+describe 'Edit article comments' do
+  context 'when no user is logged in' do
+    it 'redirect back to login path' do
+      get edit_article_comment_path(article, comment)
+
+      expect(response).to redirect_to(login_path)
+    end
+
+    it 'redirect back to login path using the Patch HTTP verb' do
+      patch_params = {
+        params: {
+          comment: {
+            body: 'New Body'
+          }
+        }
+      }
+
+      patch article_comment_path(article, comment), patch_params
+
+      expect(response).to redirect_to(login_path)
+    end
+  end
+
+  context 'when a user is logged in' do
+  end
+end
+```
+
+Running the spec above will yield failing specs. This is due to the fact that we aren't having any guard in the `CommentsController` if a user is logged in or not. This is for the `update` action, as we are doing calling the `patch` method.
+
+Let's open the `CommentsController` and change the `update` action:
+```ruby
+def update
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!', login_path) and return
+  end
+
+  @comment = Comment.find(params[:id])
+  @article = @comment.article
+
+  if @comment.update(comment_params)
+    redirect_to @article
+  else
+    render :edit
+  end
+end
+```
+
+Next are the specs for the next context, when a user is logged in:
+```ruby
+context 'when a user is logged in' do
+  let(:user) { create(:user) }
+  let(:user_comment) { create(:comment, user: user) }
+
+  before do
+    post_params = {
+      params: {
+        session: {
+          email: user.email,
+          password: user.password
+        }
+      }
+    }
+
+    post login_path, post_params
+  end
+
+  it 'cannot edit different user comments' do
+    patch_params = {
+      params: {
+        comment: {
+          body: 'New Body'
+        }
+      }
+    }
+
+    patch article_comment_path(article, comment), patch_params
+
+    expect(response).to redirect_to(login_path)
+    expect(flash[:danger]).to eq 'Wrong User'
+  end
+
+  it 'is able to edit a comment' do
+    patch_params = {
+      params: {
+        comment: {
+          body: 'New Body'
+        }
+      }
+    }
+
+    patch article_comment_path(user_comment.article, user_comment), patch_params
+
+    expect(user_comment.reload.body).to eq 'New Body'
+  end
+end
+```
+
+Running this will fail on:
+```
+Failures:
+
+  1) Comments Edit article comments when a user is logged in cannot edit different user comments
+     Failure/Error: expect(response).to redirect_to(login_path)
+
+       Expected response to be a redirect to <http://www.example.com/login> but was a redirect to <http://www.example.com/articles/1>.
+       Expected "http://www.example.com/login" to be === "http://www.example.com/articles/1".
+     # ./spec/requests/comments_spec.rb:58:in `block (4 levels) in <top (required)>'
+```
+
+At this stage, the `update` method will allow for a user to update a comments, that doesn't belongs to him. Let's fix this:
+```ruby
+def update
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!', login_path) and return
+  end
+
+  @comment = Comment.find(params[:id])
+  @article = @comment.article
+  if equal_with_current_user?(@comment.user)
+    if @comment.update(comment_params)
+      redirect_to @article
+    else
+      render :edit
+    end
+  else
+    session_notice(:danger, 'Wrong User', login_path)
+  end
+end
+```
+
+Moving on with the next describe block: `Creating an article comment`. In this block, we also have two different specs contexts. Let's start with the first one: `when no user is logged-in`:
+```ruby
+describe 'Creating an article comment' do
+  context 'when no user is logged in' do
+    it 'redirect back when creating new comment' do
+      post_params = {
+        params: {
+          comment: {
+            body: 'New Body'
+          }
+        }
+      }
+
+      post article_comments_path(article), post_params
+
+      expect(response).to redirect_to(login_path)
+    end
+  end
+
+  context 'when a user is logged in' do
+    it 'can create a comment'
+  end
+end
+```
+
+This will fail. A non logged in user can make a POST to create a new article, and the article will be created. This is a bug and we should fix this. Open the `CommentsController` and adjust the `create` action:
+```ruby
+def create
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!', login_path) and return
+  end
+
+  @article = Article.find(params[:article_id])
+  @comment = @article.comments.build(comment_params)
+  @comment.user = current_user
+
+  if @comment.save
+    redirect_to @article
+  else
+    render :new
+  end
+end
+```
+
+And the last context in this describe block, is when a user is logged in into the system:
+```ruby
+context 'when a user is logged in' do
+  let(:user) { create(:user) }
+  let(:article) { create(:article, user: user) }
+
+  before do
+    post_params = {
+      params: {
+        session: {
+          email: user.email,
+          password: user.password
+        }
+      }
+    }
+
+    post login_path, post_params
+  end
+
+  it 'can create a comment' do
+    post_comment_params = {
+      params: {
+        comment: {
+          body: 'New Body'
+        }
+      }
+    }
+
+    expect do
+      post article_comments_path(article), post_comment_params
+    end.to change { Comment.count }
+  end
+end
+```
+
+Running `spec spec/requests/comments_spec.rb` will yield all green specs.
+
+The last part is the spec for `Deleting an article comment`. Note that in this part of the specs, we are adding new functionality in our blog application. That is, we are allowing for an article's user to be able to delete different user comments for the same article. But first, let's write the spec in a context when no user is logged-on:
+```ruby
+describe 'Deleting an article comment' do
+  context 'when no user is logged in' do
+    it 'redirect back when deleting a comment'  do
+      delete article_comment_path(article, comment)
+
+      expect(response).to redirect_to(login_path)
+    end
+  end
+end
+```
+
+Running the `rspec spec/requests/comments_spec.rb` with yield failure. The same where we aren't allowed to use double render to redirect to inside an action. Let's fix this in the `destroy` action:
+```ruby
+def destroy
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!', login_path) and return
+  end
+
+  comment = Comment.find(params[:id])
+
+  if equal_with_current_user?(comment.user)
+    comment.destroy
+    redirect_to comment.article
+  else
+    session_notice(:danger, 'Wrong User')
+  end
+end
+```
+
+Moving on onto the next context. When a user is logged in:
+```ruby
+context 'when a user is logged in' do
+  let(:user) { create(:user) }
+  let(:article) { create(:article, user: user) }
+  let(:comment) { create(:comment, user: user, article: article) }
+
+  let(:different_user) { create(:user) }
+  let(:different_comment) { create(:comment, user: different_user) }
+
+  before do
+    post_params = {
+      params: {
+        session: {
+          email: user.email,
+          password: user.password
+        }
+      }
+    }
+
+    post login_path, post_params
+  end
+
+  it 'can delete its own article comment' do
+    delete article_comment_path(article, comment)
+
+    expect(response).to redirect_to(article_path(article))
+  end
+
+  it 'cannot delete different user comment on a different user article' do
+    delete article_comment_path(article, different_comment)
+
+    expect(flash[:danger]).to eq 'Wrong User'
+    expect(response).to redirect_to(root_path)
+  end
+
+  it 'can delete different user comments on its own article' do
+    article.comments << different_comment
+
+    delete article_comment_path(article, different_comment)
+
+    expect(response).to redirect_to(article_path(article))
+  end
+end
+```
+
+Running the specs:
+```
+❯ rspec spec/requests/comments_spec.rb
+
+Failures:
+
+  1) Comments Deleting an article comment when a user is logged in can delete different user comments on its own article
+     Failure/Error: expect(response).to redirect_to(article_path(article))
+
+       Expected response to be a redirect to <http://www.example.com/articles/1> but was a redirect to <http://www.example.com/>.
+       Expected "http://www.example.com/articles/1" to be === "http://www.example.com/".
+     # ./spec/requests/comments_spec.rb:176:in `block (4 levels) in <top (required)>'
+```
+
+This failure is part of our new functionality. Let's modify once more the `destroy` action:
+```ruby
+def destroy
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!', login_path) and return
+  end
+
+  comment = Comment.find(params[:id])
+  article = comment.article
+
+  if equal_with_current_user?(article.user)
+    comment.destroy
+    redirect_to comment.article
+  else
+    session_notice(:danger, 'Wrong User')
+  end
+end
+```
+
+The difference here is when calling the `equal_with_current_user?` method. Now we are passing the `articles.user` when we try to compare with `current_user`. Also, we need to change the `_comment` partial view, to allow for a user to delete comments on its articles. No matter who is the owner of the comment. Open the `app/views/comments/_comment.html.erb` partial file and add new `if` guard:
+```html
+<div class="column is-6 is-offset-3">
+  <article class="media">
+    <div class="media-content">
+      <div class="content">
+        <p>
+          <strong><%= comment.user.name %></strong> <small><%= time_ago_in_words(comment.created_at) %> ago </small>
+          <br>
+          <%= comment.body %>
+        </p>
+      </div>
+      <nav class="level is-mobile">
+        <% if equal_with_current_user?(comment.user) %>
+          <div class="level-left">
+            <%= link_to edit_article_comment_path(comment.article, comment), class: "level-item" do %>
+              <span class="icon is-small"><i class="fas fa-edit"></i></span>
+            <% end %>
+            <%= link_to article_comment_path(comment.article, comment), method: :delete , class: "level-item", data: { confirm: "Are you sure you want to delete this comment?" } do %>
+              <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+            <% end %>
+          </div>
+        <% elsif equal_with_current_user?(comment.article.user) %>
+          <div class="level-left">
+            <%= link_to article_comment_path(comment.article, comment), method: :delete , class: "level-item", data: { confirm: "Are you sure you want to delete this comment?" } do %>
+              <span class="icon is-small"><i class="fas fa-trash-alt"></i></span>
+            <% end %>
+          </div>
+        <% end %>
+      </nav>
+    </div>
+  </article>
+</div>
+```
+
+Once more, for the last time, we run all specs with `rspec spec`, and expecting all green specs.
