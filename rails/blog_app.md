@@ -4813,3 +4813,414 @@ One important note is on `follow_redirect!`. In every place in our Controllers, 
 For the methods like `get`, `post`, and all other HTTP verbs, we can put either a string that represents the resource path, or we can use the Rails `_path` methods. Like `root_path` for the `/` resource.
 
 Other thing we can notice from our first request spec, is that we have access to the `session` and `flash` objects. We can write any expect block around that objects in our spec files.
+
+### Articles request specs
+
+In this section, we'll write the Article's request spec. We'll try to write some edge cases with the request specs. These edge cases were impossible to write with the system specs. For example: with the request spec, we can directly call the `update` action, without first visiting the `edit` page (action). The same applies to the direct creation of the article, without visiting the `new` actions. And also for destroying an article. With request specs we can call directly `destroy`, using the HTTP `delete` verb, without hitting any UI button.
+
+Let's see this in action.
+
+Note that, we might catch some bugs in this section.
+
+First, let's create the request spec file, using the `rspec` command-line tool:
+```
+❯ rails generate rspec:request articles
+```
+
+This will create the `spec/requests/articles_spec.rb` file.
+
+Open the file, and change it, to be:
+```ruby
+require 'rails_helper'
+
+RSpec.describe 'Articles' do
+end
+```
+
+The first scenario is the creation of the article:
+```ruby
+describe 'Creating an article' do
+  context "when no user is logged in" do
+    it 'redirects back to login path' do
+      post_params = {
+        params: {
+          article: {
+            title: 'New article'
+          }
+        }
+      }
+
+      post '/articles', post_params
+
+      expect(response).to redirect_to(login_path)
+      expect(flash[:danger]).to eq 'You must be logged in!'
+    end
+  end
+end
+```
+
+In this part of the spec, we are directly using the `POST` HTTP verb, to try to create the article. And if no user is logged in, we should expect flash notice and make a redirect to a login path. Let's run this spec, and evaluate the output:
+```
+❯ rspec spec/requests/articles_spec.rb
+
+Articles
+  Creating an article
+    when no user is logged in
+      redirects back to login path (FAILED - 1)
+
+Failures:
+
+  1) Articles Creating an article when no user is logged in redirects back to login path
+     Failure/Error: expect(response).to redirect_to(login_path)
+       Expected response to be a <3XX: redirect>, but was a <200: OK>
+     # ./spec/requests/articles_spec.rb:17:in `block (4 levels) in <top (required)>'
+
+Finished in 0.15294 seconds (files took 1.39 seconds to load)
+1 example, 1 failure
+
+Failed examples:
+
+rspec ./spec/requests/articles_spec.rb:6 # Articles Creating an article when no user is logged in redirects back to login path
+```
+
+The output show a failing spec. So let's open the `ArticlesController` controller, and in the `create` action, try to fix this:
+```ruby
+def create
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!', login_path) and return
+  end
+
+  @article = Article.new(article_params)
+  @article.user = current_user
+
+  if @article.save
+    redirect_to @article
+  else
+    render :new
+  end
+end
+```
+
+We are adding the `logged_in?` to check if we have a logged-in user. Also, we are using the `and return` here not to have a double render or redirect to error from Rails. This applies that we need to adapt to the `session_notice` method in the `SessionsHelper` class:
+```ruby
+def session_notice(type, message, path = root_path)
+  flash[type.to_sym] = message
+  redirect_to path
+end
+```
+
+Now re-run the spec:
+```
+❯ rspec spec/requests/articles_spec.rb
+
+Articles
+  Creating an article
+    when no user is logged in
+      redirects back to login path
+
+Finished in 0.05129 seconds (files took 1.4 seconds to load)
+1 example, 0 failures
+```
+
+---
+
+*Note:* When we are done writing specs, we'll get back to our blog implementation and try to refactor some of the controller code, using helpful Rails methods. If some of the code looks like using too much `if/else` statements, please be patient.
+
+---
+
+For editing an article, we can group the specs into multiple contexts:
+- when the article's user is the same as the logged-in User
+- when the article's user is different then the logged-in User
+- when no user is logged-in
+
+For the first context, we need to have a `user` factory and an `article` factory with the same user. After that, we need to log in to the user and make the `PATCH` HTTP verb:
+```ruby
+describe 'Editing an article' do
+  context "when the article's user is the same as the logged in User" do
+    let(:user) { create(:user) }
+    let(:article) { create(:article, user: user) }
+
+    it 'can edit the article' do
+      get '/login'
+      expect(response).to have_http_status(:ok)
+
+      post_params = {
+        params: {
+          session: {
+            email: user.email,
+            password: user.password
+          }
+        }
+      }
+
+      post '/login', post_params
+
+      follow_redirect!
+      expect(flash[:success]).to eq "Welcome #{user.name} !"
+
+      get "/articles/#{article.id}"
+      expect(response).to have_http_status(:ok)
+
+      get "/articles/#{article.id}/edit"
+      expect(response).to have_http_status(:ok)
+
+      patch_params = {
+        params: {
+          article: {
+            title: article.title,
+            body: "New Body"
+          }
+        }
+      }
+
+      patch "/articles/#{article.id}", patch_params
+
+      expect(response).to have_http_status(:found)
+
+      follow_redirect!
+
+      expect(response.body).to include(article.title)
+    end
+  end
+end
+```
+
+Running the spec, should be all green.
+
+Next is when the article's user is a different user than the logged-in User.
+```ruby
+describe 'Editing an article' do
+  context "when the article's user is the same as the logged in User" do
+    # code omitted
+  end
+
+  context "when the article's user is different then the logged in User" do
+    let(:user) { create(:user) }
+    let(:article) { create(:article, user: user) }
+
+    let(:login_user) { create(:user) }
+
+    it 'redirect back when GET edit' do
+      get '/login'
+
+      post_params = {
+        params: {
+          session: {
+            email: login_user.email,
+            password: login_user.password
+          }
+        }
+      }
+
+      post '/login', post_params
+
+      get "/articles/#{article.id}/edit"
+
+      expect(flash[:danger]).to eq 'Wrong User'
+      expect(response).to redirect_to(root_path)
+    end
+
+    it 'redirect back when PATCH edit' do
+      get '/login'
+
+      post_params = {
+        params: {
+          session: {
+            email: login_user.email,
+            password: login_user.password
+          }
+        }
+      }
+
+      post '/login', post_params
+
+      patch_params = {
+        params: {
+          article: {
+            title: article.title,
+            body: "New Body"
+          }
+        }
+      }
+
+      patch "/articles/#{article.id}", patch_params
+
+      expect(flash[:danger]).to eq 'Wrong User'
+      expect(response).to redirect_to(root_path)
+    end
+  end
+end
+```
+
+Running the spec, should thorough a failing spec:
+```
+Failures:
+
+  1) Articles Editing an article when the article's user is different then the logged in User redirect back when PATCH edit
+     Failure/Error: expect(flash[:danger]).to eq 'Wrong User'
+
+       expected: "Wrong User"
+            got: nil
+
+       (compared using ==)
+     # ./spec/requests/articles_spec.rb:122:in `block (4 levels) in <top (required)>'
+```
+
+Let's go back to `ArticlesController` and fix the code in the `update` action:
+```ruby
+def update
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!') and return
+  end
+
+  @article = Article.find(params[:id])
+
+  if equal_with_current_user?(@article.user)
+    if @article.update(article_params)
+      redirect_to @article
+    else
+      render :edit
+    end
+  else
+    session_notice(:danger, 'Wrong User') and return
+  end
+end
+```
+
+In the same action, we are adding the session notice when no user is logged in into the system and tries to update an article. Let's write that last context:
+```ruby
+describe 'Editing an article' do
+  context "when the article's user is the same as the logged in User" do
+    # code omitted
+  end
+
+  context "when the article's user is different then the logged in User" do
+    # code omitted
+  end
+
+  context "when no user is logged in" do
+    let(:article) { create(:article) }
+
+    it 'redirect back to root path' do
+      get "/articles/#{article.id}/edit"
+
+      expect(flash[:danger]).to eq 'You must be logged in!'
+      expect(response).to redirect_to(root_path)
+    end
+
+    it 'redirect back to root when updating an article' do
+      patch_params = {
+        params: {
+          article: {
+            title: article.title,
+            body: "New Body"
+          }
+        }
+      }
+
+      patch "/articles/#{article.id}", patch_params
+
+      expect(flash[:danger]).to eq 'You must be logged in!'
+      expect(response).to redirect_to(root_path)
+    end
+  end
+end
+```
+
+Running `rspec spec/requests/articles_spec.rb` should yield all green specs.
+
+The last part in this request specs, is to write spec for destroying an article. Similarly, as we did in the editing specs, we can have multiple contexts inside this section:
+```ruby
+describe 'Deleting an article' do
+  context "when the article's user is the same as the logged in User" do
+    let(:user) { create(:user) }
+    let(:article) { create(:article, user: user) }
+
+    it 'can delete the article' do
+      get '/login'
+
+      post_params = {
+        params: {
+          session: {
+            email: user.email,
+            password: user.password
+          }
+        }
+      }
+
+      post '/login', post_params
+
+      follow_redirect!
+
+      delete "/articles/#{article.id}"
+
+      expect(response).to redirect_to(articles_path)
+    end
+  end
+
+  context "when the article's user is different then the logged in User" do
+    let(:user) { create(:user) }
+    let(:article) { create(:article, user: user) }
+
+    let(:login_user) { create(:user) }
+
+    it 'redirect back to root path' do
+      get '/login'
+
+      post_params = {
+        params: {
+          session: {
+            email: login_user.email,
+            password: login_user.password
+          }
+        }
+      }
+
+      post '/login', post_params
+
+      follow_redirect!
+
+      delete "/articles/#{article.id}"
+
+      expect(flash[:danger]).to eq 'Wrong User'
+      expect(response).to redirect_to(root_path)
+    end
+  end
+
+  context "when no user is logged in" do
+    let(:article) { create(:article) }
+
+    it 'redirect back to root path' do
+      delete "/articles/#{article.id}"
+
+      expect(flash[:danger]).to eq 'You must be logged in!'
+      expect(response).to redirect_to(root_path)
+    end
+  end
+end
+```
+
+Running ths spec, will yield a failed spec:
+```
+AbstractController::DoubleRenderError:
+       Render and/or redirect were called multiple times in this action. Please note that you may only call render OR redirect, and at most once per action. Also note that neither redirect nor render terminate execution of the action, so if you want to exit an action after redirecting, you need to do something like "redirect_to(...) and return".
+```
+
+Let's go back into the controller, and fix this in the `destroy` action:
+```ruby
+def destroy
+  unless logged_in?
+    session_notice(:danger, 'You must be logged in!') and return
+  end
+
+  article = Article.find(params[:id])
+
+  if equal_with_current_user?(article.user)
+    article.destroy
+    redirect_to articles_path
+  else
+    session_notice(:danger, 'Wrong User')
+  end
+end
+```
+
