@@ -5667,3 +5667,417 @@ The difference here is when calling the `equal_with_current_user?` method. Now w
 ```
 
 Once more, for the last time, we run all specs with `rspec spec`, and expecting all green specs.
+
+
+### Request spec - DRY
+
+We can notice, in most of the specs, when we want to log-in a specific user, we write the same instructions:
+```ruby
+post_params = {
+  params: {
+    session: {
+      email: user.email,
+      password: user.password
+    }
+  }
+}
+
+post login_path, post_params
+```
+
+We can move this into a method in the `spec/helpers/user_helper.rb` file, and modify the specs to use this method.
+```ruby
+module UserHelper
+  def log_in(user)
+    visit login_path
+
+    within('form') do
+      fill_in "Email", with: user.email
+      fill_in "Password", with: user.password
+
+      click_on 'Log In'
+    end
+  end
+
+  def request_log_in(user)
+    post_params = {
+      params: {
+        session: {
+          email: user.email,
+          password: user.password
+        }
+      }
+    }
+
+    post login_path, post_params
+  end
+end
+```
+
+Now with this in place, go on and adapt the specs.
+
+## Using Controller filets
+
+Filters are methods that are run "before", "after" or "around" a controller action.
+
+Filters are inherited, so if you set a filter on ApplicationController, it will be run on every controller in your application.
+
+"before" filters may halt the request cycle. A common "before" filter is one that requires that a user is logged in for an action to be run. We can define such a filter in our ApplicationController and will take effect for all the controller actions in our application.
+```ruby
+class ApplicationController < ActionController::Base
+  include SessionsHelper
+
+  before_action :require_login
+
+  private
+
+  def require_login
+    unless logged_in?
+      flash[:danger] = 'Please sign in to continue.'
+      redirect_to login_path
+    end
+  end
+end
+```
+
+Only using this in `ApplicationController` will make everything in the application require the user to be logged in to use it. For obvious reasons (the user wouldn't be able to log in in the first place!), not all controllers or actions should require this. We can prevent this filter from running before particular actions with `skip_before_action`.
+
+In our implementation, that would be:
+- In `ArticlesController`
+```ruby
+class ArticlesController < ApplicationController
+  skip_before_action :require_login, only: [:index, :show]
+# code omitted
+```
+- In `SessionsController`
+```ruby
+class SessionsController < ApplicationController
+  skip_before_action :require_login, only: [:new, :create]
+# code omitted
+```
+- In `UsersController`
+```ruby
+class UsersController < ApplicationController
+  skip_before_action :require_login, except: :show
+# code omitted
+```
+
+With that being said, the other thing we can notice from the `require_login` filter implementation, is that it's doing the same instructions like the `session_notice` helper method in `app/helpers/sessions_helper.rb`.
+
+Now that we have the specs in place, we have the confidence to go on and make the changes/refactor. The first thing we can do is to delete the `session_notice` helper method from `app/helpers/sessions_helper.rb` and run all the specs.
+
+Not that this helper was used to make a flash notice for `Wrong User`, i.e., when a logged-in user, tries to delete/update an article or a comment, that doesn't belong to him. We will need to move back that part of the code into the controller's action, and we'll try to refactor that later.
+
+Running the specs after the deletion will have plenty of failures. But that is expected. Also, let's not forget about the agreement for the flash message and the redirect path. That agreement requires to change our specs as well.
+
+**I strongly suggest to hold on here with the next instructions and try to make this refactor by self.**
+
+---
+Changes after the `require_login` filter changes:
+
+```diff
+❯ git diff
+diff --git a/app/controllers/application_controller.rb b/app/controllers/application_controller.rb
+index 09faff3..b7e2c78 100644
+--- a/app/controllers/application_controller.rb
++++ b/app/controllers/application_controller.rb
+@@ -1,3 +1,14 @@
+ class ApplicationController < ActionController::Base
+   include SessionsHelper
++
++  before_action :require_login
++
++  private
++
++  def require_login
++    unless logged_in?
++      flash[:danger] = 'Please sign in to continue.'
++      redirect_to login_path
++    end
++  end
+ end
+diff --git a/app/controllers/articles_controller.rb b/app/controllers/articles_controller.rb
+index 5b84af8..09b7769 100644
+--- a/app/controllers/articles_controller.rb
++++ b/app/controllers/articles_controller.rb
+@@ -1,4 +1,6 @@
+ class ArticlesController < ApplicationController
++  skip_before_action :require_login, only: [:index, :show]
++
+   def index
+     @articles = Article.all
+   end
+@@ -8,16 +10,10 @@ class ArticlesController < ApplicationController
+   end
+
+   def new
+-    session_notice(:danger, 'You must be logged in!') unless logged_in?
+-
+     @article = Article.new
+   end
+
+   def create
+-    unless logged_in?
+-      session_notice(:danger, 'You must be logged in!', login_path) and return
+-    end
+-
+     @article = Article.new(article_params)
+     @article.user = current_user
+
+@@ -29,45 +25,38 @@ class ArticlesController < ApplicationController
+   end
+
+   def edit
+-    session_notice(:danger, 'You must be logged in!') unless logged_in?
+-
+     @article = Article.find(params[:id])
+
+-    if logged_in?
+-      session_notice(:danger, 'Wrong User') unless equal_with_current_user?(@article.user)
++    unless equal_with_current_user?(@article.user)
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path) and return
+     end
+   end
+
+   def update
+-    unless logged_in?
+-      session_notice(:danger, 'You must be logged in!') and return
+-    end
+-
+     @article = Article.find(params[:id])
+
+-    if equal_with_current_user?(@article.user)
+-      if @article.update(article_params)
+-        redirect_to @article
+-      else
+-        render :edit
+-      end
++    unless equal_with_current_user?(@article.user)
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path) and return
++    end
++
++    if @article.update(article_params)
++      redirect_to @article
+     else
+-      session_notice(:danger, 'Wrong User') and return
++      render :edit
+     end
+   end
+
+   def destroy
+-    unless logged_in?
+-      session_notice(:danger, 'You must be logged in!') and return
+-    end
+-
+     article = Article.find(params[:id])
+
+     if equal_with_current_user?(article.user)
+       article.destroy
+       redirect_to articles_path
+     else
+-      session_notice(:danger, 'Wrong User')
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path) and return
+     end
+   end
+
+diff --git a/app/controllers/comments_controller.rb b/app/controllers/comments_controller.rb
+index 85e7b24..56b9325 100644
+--- a/app/controllers/comments_controller.rb
++++ b/app/controllers/comments_controller.rb
+@@ -1,16 +1,10 @@
+ class CommentsController < ApplicationController
+   def new
+-    session_notice(:danger, 'You must be logged in!', login_path) unless logged_in?
+-
+     @article = Article.find(params[:article_id])
+     @comment = @article.comments.build
+   end
+
+   def create
+-    unless logged_in?
+-      session_notice(:danger, 'You must be logged in!', login_path) and return
+-    end
+-
+     @article = Article.find(params[:article_id])
+     @comment = @article.comments.build(comment_params)
+     @comment.user = current_user
+@@ -23,24 +17,20 @@ class CommentsController < ApplicationController
+   end
+
+   def edit
+-    session_notice(:danger, 'You must be logged in!', login_path) unless logged_in?
+-
+     @comment = Comment.find(params[:id])
+
+-    if logged_in?
+-      session_notice(:danger, 'Wrong User') unless equal_with_current_user?(@comment.user)
++    unless equal_with_current_user?(@comment.user)
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path) and return
+     end
+
+     @article = @comment.article
+   end
+
+   def update
+-    unless logged_in?
+-      session_notice(:danger, 'You must be logged in!', login_path) and return
+-    end
+-
+     @comment = Comment.find(params[:id])
+     @article = @comment.article
++
+     if equal_with_current_user?(@comment.user)
+       if @comment.update(comment_params)
+         redirect_to @article
+@@ -48,15 +38,12 @@ class CommentsController < ApplicationController
+         render :edit
+       end
+     else
+-      session_notice(:danger, 'Wrong User', login_path)
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path) and return
+     end
+   end
+
+   def destroy
+-    unless logged_in?
+-      session_notice(:danger, 'You must be logged in!', login_path) and return
+-    end
+-
+     comment = Comment.find(params[:id])
+     article = comment.article
+
+@@ -64,7 +51,8 @@ class CommentsController < ApplicationController
+       comment.destroy
+       redirect_to comment.article
+     else
+-      session_notice(:danger, 'Wrong User')
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path) and return
+     end
+   end
+
+diff --git a/app/controllers/sessions_controller.rb b/app/controllers/sessions_controller.rb
+index a7b9cad..d8e6d55 100644
+--- a/app/controllers/sessions_controller.rb
++++ b/app/controllers/sessions_controller.rb
+@@ -1,6 +1,7 @@
+ class SessionsController < ApplicationController
++  skip_before_action :require_login, only: [:new, :create]
++
+   def new
+-    session_notice('warning', 'Already logged in!') if logged_in?
+   end
+
+   def create
+@@ -14,7 +15,6 @@ class SessionsController < ApplicationController
+       flash.now[:danger] = 'Email and password miss match'
+       render :new
+     end
+-
+   end
+
+   def destroy
+diff --git a/app/controllers/users_controller.rb b/app/controllers/users_controller.rb
+index d9792bb..206617a 100644
+--- a/app/controllers/users_controller.rb
++++ b/app/controllers/users_controller.rb
+@@ -1,7 +1,7 @@
+ class UsersController < ApplicationController
+-  def new
+-    session_notice(:warning, 'Already logged in!') if logged_in?
++  skip_before_action :require_login, except: :show
+
++  def new
+     @user = User.new
+   end
+
+@@ -23,6 +23,6 @@ class UsersController < ApplicationController
+   private
+
+   def user_params
+-    params.require(:user).permit(:name,:email,:password,:password_confirmation)
++    params.require(:user).permit(:name, :email, :password, :password_confirmation)
+   end
+ end
+diff --git a/app/helpers/sessions_helper.rb b/app/helpers/sessions_helper.rb
+index 5057e31..5f6fa17 100644
+--- a/app/helpers/sessions_helper.rb
++++ b/app/helpers/sessions_helper.rb
+@@ -18,11 +18,6 @@ module SessionsHelper
+     @current_user = nil
+   end
+
+-  def session_notice(type, message, path = root_path)
+-    flash[type.to_sym] = message
+-    redirect_to path
+-  end
+-
+   def equal_with_current_user?(other_user)
+     current_user == other_user
+   end
+diff --git a/spec/requests/articles_spec.rb b/spec/requests/articles_spec.rb
+index 08c9421..f1d9d8c 100644
+--- a/spec/requests/articles_spec.rb
++++ b/spec/requests/articles_spec.rb
+@@ -15,7 +15,7 @@ RSpec.describe 'Articles' do
+         post '/articles', post_params
+
+         expect(response).to redirect_to(login_path)
+-        expect(flash[:danger]).to eq 'You must be logged in!'
++        expect(flash[:danger]).to eq 'Please sign in to continue.'
+       end
+     end
+   end
+@@ -99,8 +99,8 @@ RSpec.describe 'Articles' do
+       it 'redirect back to root path' do
+         get "/articles/#{article.id}/edit"
+
+-        expect(flash[:danger]).to eq 'You must be logged in!'
+-        expect(response).to redirect_to(root_path)
++        expect(flash[:danger]).to eq 'Please sign in to continue.'
++        expect(response).to redirect_to(login_path)
+       end
+
+       it 'redirect back to root when updating an article' do
+@@ -115,8 +115,8 @@ RSpec.describe 'Articles' do
+
+         patch "/articles/#{article.id}", patch_params
+
+-        expect(flash[:danger]).to eq 'You must be logged in!'
+-        expect(response).to redirect_to(root_path)
++        expect(flash[:danger]).to eq 'Please sign in to continue.'
++        expect(response).to redirect_to(login_path)
+       end
+     end
+   end
+@@ -163,8 +163,8 @@ RSpec.describe 'Articles' do
+       it 'redirect back to root path' do
+         delete "/articles/#{article.id}"
+
+-        expect(flash[:danger]).to eq 'You must be logged in!'
+-        expect(response).to redirect_to(root_path)
++        expect(flash[:danger]).to eq 'Please sign in to continue.'
++        expect(response).to redirect_to(login_path)
+       end
+     end
+   end
+diff --git a/spec/requests/comments_spec.rb b/spec/requests/comments_spec.rb
+index d50ec82..5d0d2f3 100644
+--- a/spec/requests/comments_spec.rb
++++ b/spec/requests/comments_spec.rb
+@@ -44,7 +44,7 @@ RSpec.describe 'Comments' do
+
+         patch article_comment_path(article, comment), patch_params
+
+-        expect(response).to redirect_to(login_path)
++        expect(response).to redirect_to(root_path)
+         expect(flash[:danger]).to eq 'Wrong User'
+       end
+```
+
+---
