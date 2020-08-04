@@ -5716,7 +5716,7 @@ end
 
 Now with this in place, go on and adapt the specs.
 
-## Using Controller filets
+## Using Controller filters
 
 Filters are methods that are run "before", "after" or "around" a controller action.
 
