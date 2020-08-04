@@ -1,5 +1,6 @@
 .sourceCode.html,
 .sourceCode.ruby,
+.sourceCode.diff,
 .sourceCode.javascript {
   white-space: pre-wrap !important;
 }
