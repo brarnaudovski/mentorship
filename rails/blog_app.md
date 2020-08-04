@@ -6081,3 +6081,308 @@ index d50ec82..5d0d2f3 100644
 ```
 
 ---
+
+### Controllers DRY using before filter
+
+Now that we know how to use the controller filter option, we can add a new one. This time, we can add a filter that is specific for a controller. The idea here is to find the specific resource in the before filter, before going into a specific action. Let's see this by an example. First, we'll start with the `ArticlesController` controller:
+```ruby
+class ArticlesController < ApplicationController
+  skip_before_action :require_login, only: [:index, :show]
+  before_action :find_article, only: [:show, :edit, :update, :destroy]
+
+  # code omitted
+
+  private
+
+  def find_article
+    @article = Article.find(params[:id])
+  end
+```
+
+By using this filter, we can now revisit the actions ([:show, :edit, :update, :destroy]), and make the adjustments. We want to delete the same statement defined in the `before` filter. The changes are:
+```diff
+❯ git diff --minimal
+diff --git a/app/controllers/articles_controller.rb b/app/controllers/articles_controller.rb
+index 09b7769..8e84617 100644
+--- a/app/controllers/articles_controller.rb
++++ b/app/controllers/articles_controller.rb
+@@ -1,12 +1,12 @@
+ class ArticlesController < ApplicationController
+   skip_before_action :require_login, only: [:index, :show]
++  before_action :find_article, only: [:show, :edit, :update, :destroy]
+
+   def index
+     @articles = Article.all
+   end
+
+   def show
+-    @article = Article.find(params[:id])
+   end
+
+   def new
+@@ -25,8 +25,6 @@ class ArticlesController < ApplicationController
+   end
+
+   def edit
+-    @article = Article.find(params[:id])
+-
+     unless equal_with_current_user?(@article.user)
+       flash[:danger] = 'Wrong User'
+       redirect_to(root_path) and return
+@@ -34,8 +32,6 @@ class ArticlesController < ApplicationController
+   end
+
+   def update
+-    @article = Article.find(params[:id])
+-
+     unless equal_with_current_user?(@article.user)
+       flash[:danger] = 'Wrong User'
+       redirect_to(root_path) and return
+@@ -49,10 +45,8 @@ class ArticlesController < ApplicationController
+   end
+
+   def destroy
+-    article = Article.find(params[:id])
+-
+-    if equal_with_current_user?(article.user)
+-      article.destroy
++    if equal_with_current_user?(@article.user)
++      @article.destroy
+       redirect_to articles_path
+     else
+       flash[:danger] = 'Wrong User'
+@@ -65,4 +59,8 @@ class ArticlesController < ApplicationController
+   def article_params
+     params.require(:article).permit(:title, :body)
+   end
++
++  def find_article
++    @article = Article.find(params[:id])
++  end
+ end
+```
+
+Make sure to run the specs (tests) to confirm that this change doesn't affect our blog implementation.
+
+We can do the same for the `CommentsController` controller. Let's see the changes:
+```diff
+❯ git diff app/controllers/comments_controller.rb
+diff --git a/app/controllers/comments_controller.rb b/app/controllers/comments_controller.rb
+index 56b9325..35e003d 100644
+--- a/app/controllers/comments_controller.rb
++++ b/app/controllers/comments_controller.rb
+@@ -1,4 +1,6 @@
+ class CommentsController < ApplicationController
++  before_action :find_comment, only: [:edit, :update, :destroy]
++
+   def new
+     @article = Article.find(params[:article_id])
+     @comment = @article.comments.build
+@@ -17,8 +19,6 @@ class CommentsController < ApplicationController
+   end
+
+   def edit
+-    @comment = Comment.find(params[:id])
+-
+     unless equal_with_current_user?(@comment.user)
+       flash[:danger] = 'Wrong User'
+       redirect_to(root_path) and return
+@@ -28,7 +28,6 @@ class CommentsController < ApplicationController
+   end
+
+   def update
+-    @comment = Comment.find(params[:id])
+     @article = @comment.article
+
+     if equal_with_current_user?(@comment.user)
+@@ -44,12 +43,11 @@ class CommentsController < ApplicationController
+   end
+
+   def destroy
+-    comment = Comment.find(params[:id])
+-    article = comment.article
++    article = @comment.article
+
+     if equal_with_current_user?(article.user)
+-      comment.destroy
+-      redirect_to comment.article
++      @comment.destroy
++      redirect_to article
+     else
+       flash[:danger] = 'Wrong User'
+       redirect_to(root_path) and return
+@@ -61,4 +59,8 @@ class CommentsController < ApplicationController
+   def comment_params
+     params.require(:comment).permit(:commenter, :body)
+   end
++
++  def find_comment
++    @comment = Comment.find(params[:id])
++  end
+ end
+```
+
+The before filter, can help us, also, to find the correct user, when we want to edit/delete some resource. In particular, the code:
+```ruby
+unless equal_with_current_user?(@comment.user)
+  flash[:danger] = 'Wrong User'
+  redirect_to(root_path) and return
+end
+```
+can be moved to a before filter. Recall that this kind of filter, halts the execution of the request, and we can freely remove the `and return` statement.
+
+Let's try with `ArticlesController` controller.
+```ruby
+class ArticlesController < ApplicationController
+  skip_before_action :require_login, only: [:index, :show]
+  before_action :find_article, only: [:show, :edit, :update, :destroy]
+  before_action :correct_user, only: [:edit, :update, :destroy]
+
+  #code omitted
+
+  private
+
+  #code omitted
+
+  def find_article
+    @article = Article.find(params[:id])
+  end
+
+  def correct_user
+    unless equal_with_current_user?(@article.user)
+      flash[:danger] = 'Wrong User'
+      redirect_to(root_path)
+    end
+  end
+end
+```
+
+Please make sure that this before filter, is defined under the `before_action :find_article` statement. The reason is that we need to have the `@article` defined first, to find the correct user.
+
+Now try to make the refactor in the controller actions for `edit`, `update` and `destroy`.
+
+The `git diff` changes after the refactor of `ArticlesController`:
+```diff
+❯ git diff app/controllers/articles_controller.rb
+diff --git a/app/controllers/articles_controller.rb b/app/controllers/articles_controller.rb
+index 8e84617..da09fcd 100644
+--- a/app/controllers/articles_controller.rb
++++ b/app/controllers/articles_controller.rb
+@@ -1,6 +1,7 @@
+ class ArticlesController < ApplicationController
+   skip_before_action :require_login, only: [:index, :show]
+   before_action :find_article, only: [:show, :edit, :update, :destroy]
++  before_action :correct_user, only: [:edit, :update, :destroy]
+
+   def index
+     @articles = Article.all
+@@ -25,18 +26,9 @@ class ArticlesController < ApplicationController
+   end
+
+   def edit
+-    unless equal_with_current_user?(@article.user)
+-      flash[:danger] = 'Wrong User'
+-      redirect_to(root_path) and return
+-    end
+   end
+
+   def update
+-    unless equal_with_current_user?(@article.user)
+-      flash[:danger] = 'Wrong User'
+-      redirect_to(root_path) and return
+-    end
+-
+     if @article.update(article_params)
+       redirect_to @article
+     else
+@@ -45,13 +37,8 @@ class ArticlesController < ApplicationController
+   end
+
+   def destroy
+-    if equal_with_current_user?(@article.user)
+-      @article.destroy
+-      redirect_to articles_path
+-    else
+-      flash[:danger] = 'Wrong User'
+-      redirect_to(root_path) and return
+-    end
++    @article.destroy
++    redirect_to articles_path
+   end
+
+   private
+@@ -63,4 +50,11 @@ class ArticlesController < ApplicationController
+   def find_article
+     @article = Article.find(params[:id])
+   end
++
++  def correct_user
++    unless equal_with_current_user?(@article.user)
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path)
++    end
++  end
+ end
+```
+
+Please don't forget to run the `rspec` command after each refactoring. And make sure that everything is green.
+
+Now, that we are happy with the result, we can to the same for the `CommentsController` controller. First we define the `before` filter, and implement the method. And at last, we do the refactoring.
+
+Here is the complete change:
+```diff
+❯ git diff app/controllers/comments_controller.rb
+diff --git a/app/controllers/comments_controller.rb b/app/controllers/comments_controller.rb
+index 35e003d..c929f1d 100644
+--- a/app/controllers/comments_controller.rb
++++ b/app/controllers/comments_controller.rb
+@@ -1,5 +1,6 @@
+ class CommentsController < ApplicationController
+   before_action :find_comment, only: [:edit, :update, :destroy]
++  before_action :correct_user, only: [:edit, :update]
+
+   def new
+     @article = Article.find(params[:article_id])
+@@ -19,26 +20,16 @@ class CommentsController < ApplicationController
+   end
+
+   def edit
+-    unless equal_with_current_user?(@comment.user)
+-      flash[:danger] = 'Wrong User'
+-      redirect_to(root_path) and return
+-    end
+-
+     @article = @comment.article
+   end
+
+   def update
+     @article = @comment.article
+
+-    if equal_with_current_user?(@comment.user)
+-      if @comment.update(comment_params)
+-        redirect_to @article
+-      else
+-        render :edit
+-      end
++    if @comment.update(comment_params)
++      redirect_to @article
+     else
+-      flash[:danger] = 'Wrong User'
+-      redirect_to(root_path) and return
++      render :edit
+     end
+   end
+
+@@ -63,4 +54,11 @@ class CommentsController < ApplicationController
+   def find_comment
+     @comment = Comment.find(params[:id])
+   end
++
++  def correct_user
++    unless equal_with_current_user?(@comment.user)
++      flash[:danger] = 'Wrong User'
++      redirect_to(root_path)
++    end
++  end
+ end
+```
