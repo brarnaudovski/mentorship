@@ -20,8 +20,8 @@ Build a web application for recipes. One recipe contains a title, description, a
   - Create a recipe.
   - Edit its recipes.
   - Destroy its recipes.
-  - Edit/Destroy recipe instruction
-  - Edit/Destroy recipe ingredient
+  - Edit/Destroy its recipe instruction
+  - Edit/Destroy its recipe ingredient
 - Un-logged in user can only see the index page (all articles), and a user profile page.
 - The user profile page should include the user *full* name alongside with the handle name and the email address.
 - No usage of third party libraries for authentication. Build a minimal authentication solution using `has_secure_password` and a `session` storage.
@@ -42,6 +42,8 @@ It is up to you to define how many multiple sets you'll have in your form for th
 
 By using the nested form, you'll need to prevent empty records, and an option to remove instructions or ingredients.
 
+Do not use third party libraries for the nested form implementation.
+
 ---
 
 ## Scoring
@@ -49,7 +51,7 @@ By using the nested form, you'll need to prevent empty records, and an option to
 The scoring will be based on the following points:
 - Readme file: Info about this app. How to install the app to be able someone to contribute? What are the minimal requirements to be able to install the application? and so on.
 - Seed file: It should contain all the record needed to seed the database with its default values and a relations. (Hint: Use factories to create the model objects)
-- Following MVP architecture, together with the RESTful architecture:
+- Following MVC architecture, together with the RESTful architecture:
   - The model:
     - Relation: the relation type, and any usage of the relation options;
     - Validation: the validation type and any usage of the validation options;
@@ -73,5 +75,3 @@ The scoring will be based on the following points:
 - Overall code consistency: indentations, new lines, etc.
 - Namings off model/controller classes, spec files, or any other classes/files
 - Defining a migration file.
-
-
